@@ -9,7 +9,7 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/aleksandarv/golang-starter/internal/logger"
+	"github.com/aleksandarv/file-uploader/internal/logger"
 )
 
 func main() {

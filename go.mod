@@ -1,3 +1,3 @@
-module github.com/aleksandarv/golang-starter
+module github.com/aleksandarv/file-uploader
 
 go 1.26.2

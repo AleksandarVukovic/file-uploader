@@ -1,14 +1,5 @@
-# golang-starter
+# file-uploader
 
-A minimal template for starting new Go services. It provides a basic project layout, a structured logger, a Makefile for common tasks, and a Dockerfile, so a new project can start with application code right away.
-
-## Using this template
-
-1. Create a new repository from this template and clone it.
-2. Update the module path in `go.mod` to your own (e.g. `github.com/<user>/<project>`).
-3. Replace `golang-starter` in the `Dockerfile` with your project name.
-4. Set `DOCKER_REPO` in the `Makefile`, or pass it on the command line.
-5. Replace this README with a description of your project.
 
 ## Requirements
 
