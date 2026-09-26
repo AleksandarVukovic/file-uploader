@@ -1,46 +1,25 @@
-PROJECT_ROOT=$(shell git rev-parse --show-toplevel)
-PROJECT_NAME=$(shell basename $(PROJECT_ROOT))
+# For a single service: make -C api-service <target>
 
-DOCKER_REPO?=vukovic96/$(PROJECT_NAME)
-DOCKER_IMAGE_TAG?=latest
+SERVICES = api-service \
+			file-service \
+			file-processing-service \
+			user-service
 
-all: test coverage build
+.PHONY: all common-pkg-test
 
-build:
-	go build -o ./bin/$(PROJECT_NAME) ./cmd/; \
+# Build each service by calling `make all`
+all: common-pkg-test
+	@set -e; \
+	for service in $(SERVICES); do \
+		echo "********************************"; \
+		echo "*** Building $$service ***"; \
+		echo "********************************"; \
+		$(MAKE) -C $$service all; \
+	done
 
-test: goenv fmt vet gotest
-
-gotest:
-	@files=$$(go list ./... | grep -v /gen | grep -v /design | grep -v /cmd | grep -v /test); \
-	go test -v -race -timeout=30s $$files
-
-fmt:
-	go fmt ./...
-
-vet:
-	go vet ./...
-
-goenv:
-	@go version
-
-coverage:
-	@files=$$(go list ./... | grep -v /gen | grep -v /design | grep -v /cmd | grep -v /test); \
-	go test -coverprofile=coverage.out $$files; \
-	go tool cover -html=coverage.out -o coverage.html
-	@total=$$(go tool cover -func=coverage.out | grep total: | awk '{print $$3}'); \
-	echo "Total coverage: $$total"; \
-	if [ $$(echo "$$total < 70.0" | sed 's/%//g' | bc) -eq 1 ]; then \
-		echo "ERROR: Coverage is below 70%!"; \
-		exit 1; \
-	fi
-
-clean:
-	rm -rf $(PROJECT_ROOT)/bin
-	rm -rf coverage.out coverage.html
-
-docker-build:
-	docker build . -t $(DOCKER_REPO):$(DOCKER_IMAGE_TAG)
-
-docker-push: docker-build
-	docker push $(DOCKER_REPO):$(DOCKER_IMAGE_TAG)
+common-pkg-test:
+	@echo "********************************"; \
+	echo "*** Testing common packages ***"; \
+	echo "********************************"
+	go vet ./common/...
+	go test -v -race -timeout=30s ./common/...
