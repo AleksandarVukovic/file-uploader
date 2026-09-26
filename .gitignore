@@ -12,7 +12,7 @@
 *.test
 
 # generated binary
-/bin/
+bin/
 
 # Code coverage profiles and other test artifacts
 *.out
