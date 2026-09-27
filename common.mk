@@ -19,7 +19,7 @@ TEST_EXCLUDE ?= /(gen|design|cmd|test)(/|$$)
 TEST_PKGS = $(shell go list ./... | grep -vE '$(TEST_EXCLUDE)')
 
 # goa variables
-GOA_VERSION := v3.26.0
+GOA_VERSION := v3.32.0
 GOA_CMD := goa.design/goa/v3/cmd/goa
 GOA_DESIGN_PKG ?= $(GO_MODULE_NAME)/$(SERVICE_NAME)/design
 GOA_GEN_OUTPUT ?= $(PROJECT_ROOT)/$(SERVICE_NAME)
