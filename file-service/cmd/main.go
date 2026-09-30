@@ -12,9 +12,12 @@ import (
 	"syscall"
 	"time"
 
+	httpmiddleware "github.com/aleksandarv/file-uploader/common/http/middleware"
 	"github.com/aleksandarv/file-uploader/common/logger"
 	"github.com/aleksandarv/file-uploader/file-service/gen/files"
+	"github.com/aleksandarv/file-uploader/file-service/gen/health"
 	"github.com/aleksandarv/file-uploader/file-service/gen/http/files/server"
+	goaHealthSrv "github.com/aleksandarv/file-uploader/file-service/gen/http/health/server"
 	"github.com/aleksandarv/file-uploader/file-service/internal/api"
 	awsc "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -51,12 +54,20 @@ func main() {
 	server := server.New(files.NewEndpoints(filesService), mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
 
 	// TODO: validate that requestID is sent
+	server.Use(httpmiddleware.PanicHandler())
 	server.Use(logger.RequestMiddleware(log))
+	server.Use(httpmiddleware.RequireRequestID())
 	server.Use(middleware.PopulateRequestContext())
 
 	server.Mount(mux)
 	for _, m := range server.Mounts {
 		log.Debug("expose API", "verb", m.Verb, "path", m.Pattern, "method", m.Method)
+	}
+
+	healthsrv := goaHealthSrv.New(health.NewEndpoints(api.NewHealthSvc()), mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
+	healthsrv.Mount(mux)
+	for _, m := range healthsrv.Mounts {
+		log.Debug("expose health API", "verb", m.Verb, "path", m.Pattern, "method", m.Method)
 	}
 
 	addr := ":" + strconv.Itoa(port)

@@ -14,10 +14,13 @@ import (
 	"time"
 
 	"github.com/aleksandarv/file-uploader/api-service/gen/files"
+	"github.com/aleksandarv/file-uploader/api-service/gen/health"
 	"github.com/aleksandarv/file-uploader/api-service/gen/http/files/server"
+	goaHealthSrv "github.com/aleksandarv/file-uploader/api-service/gen/http/health/server"
 	"github.com/aleksandarv/file-uploader/api-service/internal/api"
 	"github.com/aleksandarv/file-uploader/api-service/internal/fileservice"
 	"github.com/aleksandarv/file-uploader/common/http/client"
+	httpmiddleware "github.com/aleksandarv/file-uploader/common/http/middleware"
 	"github.com/aleksandarv/file-uploader/common/logger"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/http/middleware"
@@ -51,6 +54,7 @@ func main() {
 	mux := goahttp.NewMuxer()
 	server := server.New(files.NewEndpoints(filesService), mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
 
+	server.Use(httpmiddleware.PanicHandler())
 	server.Use(logger.RequestMiddleware(log))
 	server.Use(middleware.PopulateRequestContext())
 	server.Use(middleware.RequestID(
@@ -61,6 +65,12 @@ func main() {
 	server.Mount(mux)
 	for _, m := range server.Mounts {
 		log.Debug("expose API", "verb", m.Verb, "path", m.Pattern, "method", m.Method)
+	}
+
+	healthsrv := goaHealthSrv.New(health.NewEndpoints(api.NewHealthSvc()), mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
+	healthsrv.Mount(mux)
+	for _, m := range healthsrv.Mounts {
+		log.Debug("expose health API", "verb", m.Verb, "path", m.Pattern, "method", m.Method)
 	}
 
 	addr := ":" + strconv.Itoa(port)

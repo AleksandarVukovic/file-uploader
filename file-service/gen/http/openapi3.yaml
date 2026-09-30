@@ -90,6 +90,48 @@ paths:
                                 name: internal_error
                                 temporary: false
                                 timeout: false
+    /health:
+        get:
+            tags:
+                - health
+            summary: health health
+            description: Returns the health status of the service.
+            operationId: health#health
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/HealthResponseBody'
+                            example:
+                                status: ok
+                "500":
+                    description: 'internal_error: Fault in the service.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: internal_error
+                                temporary: false
+                                timeout: false
+                "503":
+                    description: 'unavailable: Service unavailable.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: unavailable
+                                temporary: false
+                                timeout: false
 components:
     schemas:
         Error:
@@ -134,6 +176,19 @@ components:
                 - temporary
                 - timeout
                 - fault
+        HealthResponseBody:
+            type: object
+            properties:
+                status:
+                    type: string
+                    description: Health status of the service
+                    example: ok
+            example:
+                status: ok
+            required:
+                - status
 tags:
     - name: files
       description: Service manages upload of single files.
+    - name: health
+      description: Service provides health check functionality.
