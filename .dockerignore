@@ -1,0 +1,26 @@
+# version control / editor / tooling — none of it is needed inside a service image
+.git
+.github
+.claude
+.idea
+.vscode
+
+# docs
+*.md
+LICENSE
+adrs
+
+# local env / secrets — never let these into a build context
+.env
+.env.*
+
+# not needed by any service's Dockerfile
+infra
+scripts
+test
+docker-compose*.yml
+
+# build artifacts
+**/bin
+**/coverage.out
+**/coverage.html
