@@ -3,7 +3,7 @@
 # ==============================================================================
 
 # build stage
-FROM golang:1.26 AS builder
+FROM golang:1.26.8 AS builder
 
 WORKDIR /app
 
@@ -20,14 +20,18 @@ COPY ./go.mod ./go.sum ./app/
 RUN CGO_ENABLED=0 GOOS=linux make -C app build PROJECT_NAME=api-service
 
 # final stage
-FROM alpine:latest
+FROM alpine:3.24.2
 
-WORKDIR /root/
+RUN addgroup -S appgroup && adduser -S -G appgroup appuser
 
-COPY --from=builder /api-service/bin/api-service ./api-service
+WORKDIR /home/appuser
+
+COPY --from=builder --chown=appuser:appgroup /api-service/bin/api-service ./api-service
 
 ENV PORT=8080
 
 EXPOSE $PORT
+
+USER appuser
 
 CMD ["./api-service"]
