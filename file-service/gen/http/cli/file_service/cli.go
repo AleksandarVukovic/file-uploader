@@ -15,6 +15,7 @@ import (
 	"os"
 
 	filesc "github.com/aleksandarv/file-uploader/file-service/gen/http/files/client"
+	healthc "github.com/aleksandarv/file-uploader/file-service/gen/http/health/client"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -25,12 +26,14 @@ import (
 func UsageCommands() []string {
 	return []string{
 		"files upload",
+		"health health",
 	}
 }
 
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
 	return os.Args[0] + " " + "files upload --filename \"users.csv\" --size 1048576 --content-type \"text/csv\" --checksum \"9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08\" --stream \"goa.png\"" + "\n" +
+		os.Args[0] + " " + "health health" + "\n" +
 		""
 }
 
@@ -71,6 +74,10 @@ func ParseEndpoint(
 		filesUploadContentTypeFlag = filesUploadFlags.String("content-type", "text/csv", "")
 		filesUploadChecksumFlag    = new(cliStringFlag)
 		filesUploadStreamFlag      = new(cliStringFlag)
+
+		healthFlags = flag.NewFlagSet("health", flag.ContinueOnError)
+
+		healthHealthFlags = flag.NewFlagSet("health", flag.ExitOnError)
 	)
 	filesUploadFlags.Var(filesUploadFilenameFlag, "filename", "")
 	filesUploadFlags.Var(filesUploadSizeFlag, "size", "")
@@ -79,6 +86,9 @@ func ParseEndpoint(
 
 	filesFlags.Usage = filesUsage
 	filesUploadFlags.Usage = filesUploadUsage
+
+	healthFlags.Usage = healthUsage
+	healthHealthFlags.Usage = healthHealthUsage
 
 	if err := flag.CommandLine.Parse(os.Args[1:]); err != nil {
 		return nil, nil, err
@@ -97,6 +107,8 @@ func ParseEndpoint(
 		switch svcn {
 		case "files":
 			svcf = filesFlags
+		case "health":
+			svcf = healthFlags
 		default:
 			return nil, nil, fmt.Errorf("unknown service %q", svcn)
 		}
@@ -116,6 +128,13 @@ func ParseEndpoint(
 			switch epn {
 			case "upload":
 				epf = filesUploadFlags
+
+			}
+
+		case "health":
+			switch epn {
+			case "health":
+				epf = healthHealthFlags
 
 			}
 
@@ -152,6 +171,12 @@ func ParseEndpoint(
 						data, err = filesc.BuildUploadStreamPayload(data, *filesUploadStreamFlag.value)
 					}
 				}
+			}
+		case "health":
+			c := healthc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "health":
+				endpoint = c.Health()
 			}
 		}
 	}
@@ -196,4 +221,30 @@ func filesUploadUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "files upload --filename \"users.csv\" --size 1048576 --content-type \"text/csv\" --checksum \"9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08\" --stream \"goa.png\"")
+}
+
+// healthUsage displays the usage of the health command and its subcommands.
+func healthUsage() {
+	fmt.Fprintln(os.Stderr, `Service provides health check functionality.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] health COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    health: Returns the health status of the service.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s health COMMAND --help\n", os.Args[0])
+}
+func healthHealthUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] health health", os.Args[0])
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Returns the health status of the service.`)
+
+	// Flags list
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "health health")
 }
