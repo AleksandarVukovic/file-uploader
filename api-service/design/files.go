@@ -15,7 +15,9 @@ var _ = Service("files", func() {
 
 		Payload(func() {
 			Attribute("filename", String, "Name of the file being uploaded", func() {
-				Pattern(`^[A-Za-z0-9._-]+\.csv$`)
+				MinLength(5)
+				MaxLength(255)
+				Pattern(`^[A-Za-z0-9][A-Za-z0-9_-]*(\.[A-Za-z0-9_-]+)*\.csv$`)
 				Example("users.csv")
 			})
 			Attribute("size", Int64, "Total size of the file in bytes (max 10Mb)", func() {
@@ -29,6 +31,8 @@ var _ = Service("files", func() {
 				Example("text/csv")
 			})
 			Attribute("checksum", String, "Expected SHA-256 checksum of the file", func() {
+				MinLength(64)
+				MaxLength(64)
 				Pattern("^[a-f0-9]{64}$")
 				Example("9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08")
 			})
@@ -41,7 +45,7 @@ var _ = Service("files", func() {
 			Header("filename:Content-Disposition")
 			Header("size:Content-Length")
 			Header("contentType:Content-Type")
-			Header("checksum:X-Checksum")
+			Header("checksum:X-Checksum-Sha256")
 			Response(StatusNoContent)
 			Response("bad_request", StatusBadRequest)
 			Response("internal_error", StatusInternalServerError)

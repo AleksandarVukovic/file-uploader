@@ -26,7 +26,9 @@ paths:
                   description: Name of the file being uploaded
                   required: true
                   type: string
-                  pattern: ^[A-Za-z0-9._-]+\.csv$
+                  maxLength: 255
+                  minLength: 5
+                  pattern: ^[A-Za-z0-9][A-Za-z0-9_-]*(\.[A-Za-z0-9_-]+)*\.csv$
                 - name: Content-Length
                   in: header
                   description: Total size of the file in bytes (max 10Mb)
@@ -42,11 +44,13 @@ paths:
                   default: text/csv
                   enum:
                     - text/csv
-                - name: X-Checksum
+                - name: X-Checksum-Sha256
                   in: header
                   description: Expected SHA-256 checksum of the file
                   required: true
                   type: string
+                  maxLength: 64
+                  minLength: 64
                   pattern: ^[a-f0-9]{64}$
             responses:
                 "204":

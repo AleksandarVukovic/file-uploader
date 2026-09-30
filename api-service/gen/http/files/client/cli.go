@@ -11,6 +11,7 @@ package client
 import (
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 
 	files "github.com/aleksandarv/file-uploader/api-service/gen/files"
 	goa "goa.design/goa/v3/pkg"
@@ -26,7 +27,13 @@ func BuildUploadPayload(filesUploadFilename *string, filesUploadSize *string, fi
 			return nil, fmt.Errorf("missing required flag --filename")
 		}
 		filename = *filesUploadFilename
-		err = goa.MergeErrors(err, goa.ValidatePattern("filename", filename, "^[A-Za-z0-9._-]+\\.csv$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("filename", filename, "^[A-Za-z0-9][A-Za-z0-9_-]*(\\.[A-Za-z0-9_-]+)*\\.csv$"))
+		if utf8.RuneCountInString(filename) < 5 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("filename", filename, utf8.RuneCountInString(filename), 5, true))
+		}
+		if utf8.RuneCountInString(filename) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("filename", filename, utf8.RuneCountInString(filename), 255, false))
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -67,6 +74,12 @@ func BuildUploadPayload(filesUploadFilename *string, filesUploadSize *string, fi
 		}
 		checksum = *filesUploadChecksum
 		err = goa.MergeErrors(err, goa.ValidatePattern("checksum", checksum, "^[a-f0-9]{64}$"))
+		if utf8.RuneCountInString(checksum) < 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("checksum", checksum, utf8.RuneCountInString(checksum), 64, true))
+		}
+		if utf8.RuneCountInString(checksum) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("checksum", checksum, utf8.RuneCountInString(checksum), 64, false))
+		}
 		if err != nil {
 			return nil, err
 		}
