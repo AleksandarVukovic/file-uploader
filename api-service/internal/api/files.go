@@ -2,58 +2,46 @@ package api
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"io"
-	"os"
-	"path/filepath"
 
-	"github.com/aleksandarv/file-uploader/api-service/gen/files"
+	goaApi "github.com/aleksandarv/file-uploader/api-service/gen/files"
 	"github.com/aleksandarv/file-uploader/common/logger"
+	goafs "github.com/aleksandarv/file-uploader/file-service/gen/files"
+	goa "goa.design/goa/v3/pkg"
 )
 
-const uploadDir = "uploads"
+const maxUploadSize = 10 << 20 // 10Mb
 
-type filesService struct{}
-
-func NewFilesService() files.Service {
-	return &filesService{}
+type filesSvc struct {
+	fsClient goafs.Service
 }
 
-func (s *filesService) Upload(ctx context.Context, p *files.UploadPayload, body io.ReadCloser) error {
+func NewFilesSvc(fileServiceClient goafs.Service) goaApi.Service {
+	return &filesSvc{fsClient: fileServiceClient}
+}
+
+func (s *filesSvc) Upload(ctx context.Context, p *goaApi.UploadPayload, body io.ReadCloser) error {
 	log := logger.FromCtx(ctx)
 	defer body.Close()
 
-	// TODO: temp
-	safeName := filepath.Base(p.Filename)
-	if err := os.MkdirAll(uploadDir, 0o755); err != nil {
-		log.Error("failed to prepare upload directory", "err", err)
-		return files.MakeInternalError(errors.New("Error while storing file"))
-	}
+	// ensure that we don't accept body bigger than maxUploadSize
+	lbody := io.NopCloser(io.LimitReader(body, maxUploadSize))
+	err := s.fsClient.Upload(ctx, &goafs.UploadPayload{
+		Filename:    p.Filename,
+		Size:        p.Size,
+		ContentType: p.ContentType,
+		Checksum:    p.Checksum,
+	}, lbody)
 
-	f, err := os.Create(filepath.Join(uploadDir, safeName))
 	if err != nil {
-		log.Error("failed to create file for upload", "err", err, "filename", safeName)
-		return files.MakeInternalError(errors.New("Error while storing file"))
-	}
-	defer f.Close()
-
-	hasher := sha256.New()
-	n, err := io.Copy(io.MultiWriter(hasher, f), io.LimitReader(body, p.Size+1))
-	if err != nil {
-		log.Error("failed to read upload body", "err", err, "filename", p.Filename)
-		return files.MakeInternalError(errors.New("Error while processing uploaded file"))
-	}
-	if n != p.Size {
-		log.Error("upload rejected: size mismatch", "filename", p.Filename, "declaredSize", p.Size, "receivedSize", n)
-		return files.MakeBadRequest(errors.New("File size does not match declared size"))
-	}
-
-	checksum := hex.EncodeToString(hasher.Sum(nil))
-	if checksum != p.Checksum {
-		log.Error("upload rejected: checksum mismatch", "filename", p.Filename, "expected", p.Checksum, "got", checksum)
-		return files.MakeBadRequest(errors.New("Uploaded file checksum does not match declared checksum"))
+		var svcErr *goa.ServiceError
+		if errors.As(err, &svcErr) && svcErr.Name == "bad_request" {
+			log.Error("upload rejected by file-service", "filename", p.Filename, "err", err)
+			return goaApi.MakeBadRequest(errors.New(svcErr.Message))
+		}
+		log.Error("failed to forward upload to file-service", "filename", p.Filename, "err", err)
+		return goaApi.MakeInternalError(errors.New("Error while storing file"))
 	}
 
 	log.Info("file uploaded successfully", "filename", p.Filename)

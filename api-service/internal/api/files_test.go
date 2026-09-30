@@ -11,6 +11,8 @@ import (
 
 	"github.com/aleksandarv/file-uploader/api-service/gen/files"
 	"github.com/aleksandarv/file-uploader/common/logger"
+	fsfiles "github.com/aleksandarv/file-uploader/file-service/gen/files"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -24,16 +26,30 @@ func checksumOf(body string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// trackedCloser records whether Close was called, so tests can assert the
-// service always closes the request body, including on validation failures.
-type trackedCloser struct {
+type mockReadCloser struct {
 	io.Reader
-	closed bool
+	mock.Mock
 }
 
-func (c *trackedCloser) Close() error {
-	c.closed = true
-	return nil
+func (m *mockReadCloser) Close() error {
+	return m.Called().Error(0)
+}
+
+type mockFileService struct {
+	mock.Mock
+}
+
+func (m *mockFileService) Upload(ctx context.Context, p *fsfiles.UploadPayload, body io.ReadCloser) error {
+	return m.Called(ctx, p, body).Error(0)
+}
+
+func expectedDownstreamPayload(p *files.UploadPayload) *fsfiles.UploadPayload {
+	return &fsfiles.UploadPayload{
+		Filename:    p.Filename,
+		Size:        p.Size,
+		ContentType: p.ContentType,
+		Checksum:    p.Checksum,
+	}
 }
 
 func TestFilesService_Upload_Success(t *testing.T) {
@@ -45,63 +61,87 @@ func TestFilesService_Upload_Success(t *testing.T) {
 		Checksum:    checksumOf(body),
 	}
 
-	svc := NewFilesService()
+	mockfs := new(mockFileService)
+	mockfs.On("Upload", mock.Anything, expectedDownstreamPayload(payload), mock.Anything).
+		Run(func(args mock.Arguments) {
+			b, err := io.ReadAll(args.Get(2).(io.ReadCloser))
+			require.NoError(t, err)
+			require.Equal(t, body, string(b))
+		}).
+		Return(nil)
+
+	svc := NewFilesSvc(mockfs)
 	err := svc.Upload(testCtx(), payload, io.NopCloser(strings.NewReader(body)))
 
 	require.NoError(t, err)
+	mockfs.AssertExpectations(t)
 }
 
-func TestFilesService_Upload_BadRequest(t *testing.T) {
+func TestFilesService_Upload_ForwardsBadRequestFromFileService(t *testing.T) {
+	body := "id,name\n1,foo\n"
+	payload := &files.UploadPayload{
+		Filename:    "users.csv",
+		Size:        int64(len(body)),
+		ContentType: "text/csv",
+		Checksum:    checksumOf(body),
+	}
+
+	mockfs := new(mockFileService)
+	mockfs.On("Upload", mock.Anything, expectedDownstreamPayload(payload), mock.Anything).
+		Return(fsfiles.MakeBadRequest(errors.New("File size does not match declared size")))
+
+	svc := NewFilesSvc(mockfs)
+	err := svc.Upload(testCtx(), payload, io.NopCloser(strings.NewReader(body)))
+
+	require.Error(t, err)
+
+	var svcErr *goa.ServiceError
+	require.True(t, errors.As(err, &svcErr))
+	require.Equal(t, "bad_request", svcErr.Name)
+	require.Equal(t, "File size does not match declared size", svcErr.Message)
+	mockfs.AssertExpectations(t)
+}
+
+func TestFilesService_Upload_WrapsOtherFileServiceErrorsAsInternalError(t *testing.T) {
 	body := "id,name\n1,foo\n"
 
 	tests := []struct {
-		name        string
-		payload     *files.UploadPayload
-		wantMessage string
+		name string
+		err  error
 	}{
 		{
-			name: "declared size larger than actual body",
-			payload: &files.UploadPayload{
-				Filename:    "users.csv",
-				Size:        int64(len(body)) + 1,
-				ContentType: "text/csv",
-				Checksum:    checksumOf(body),
-			},
-			wantMessage: "File size does not match declared size",
+			name: "plain error",
+			err:  errors.New("s3 unreachable"),
 		},
 		{
-			name: "declared size smaller than actual body",
-			payload: &files.UploadPayload{
-				Filename:    "users.csv",
-				Size:        int64(len(body)) - 1,
-				ContentType: "text/csv",
-				Checksum:    checksumOf(body),
-			},
-			wantMessage: "File size does not match declared size",
-		},
-		{
-			name: "checksum does not match body",
-			payload: &files.UploadPayload{
-				Filename:    "users.csv",
-				Size:        int64(len(body)),
-				ContentType: "text/csv",
-				Checksum:    checksumOf("something else"),
-			},
-			wantMessage: "Uploaded file checksum does not match declared checksum",
+			name: "non-bad-request service error",
+			err:  fsfiles.MakeInternalError(errors.New("s3 put failed")),
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			svc := NewFilesService()
-			err := svc.Upload(testCtx(), tt.payload, io.NopCloser(strings.NewReader(body)))
+			payload := &files.UploadPayload{
+				Filename:    "users.csv",
+				Size:        int64(len(body)),
+				ContentType: "text/csv",
+				Checksum:    checksumOf(body),
+			}
+
+			mockfs := new(mockFileService)
+			mockfs.On("Upload", mock.Anything, expectedDownstreamPayload(payload), mock.Anything).
+				Return(tt.err)
+
+			svc := NewFilesSvc(mockfs)
+			err := svc.Upload(testCtx(), payload, io.NopCloser(strings.NewReader(body)))
 
 			require.Error(t, err)
 
 			var svcErr *goa.ServiceError
 			require.True(t, errors.As(err, &svcErr))
-			require.Equal(t, "bad_request", svcErr.Name)
-			require.Equal(t, tt.wantMessage, svcErr.Message)
+			require.Equal(t, "internal_error", svcErr.Name)
+			require.Equal(t, "Error while storing file", svcErr.Message)
+			mockfs.AssertExpectations(t)
 		})
 	}
 }
@@ -115,25 +155,36 @@ func TestFilesService_Upload_ClosesBody(t *testing.T) {
 		Checksum:    checksumOf(body),
 	}
 
-	rc := &trackedCloser{Reader: strings.NewReader(body)}
+	rc := &mockReadCloser{Reader: strings.NewReader(body)}
+	rc.On("Close").Return(nil)
 
-	svc := NewFilesService()
+	mockfs := new(mockFileService)
+	mockfs.On("Upload", mock.Anything, expectedDownstreamPayload(payload), mock.Anything).Return(nil)
+
+	svc := NewFilesSvc(mockfs)
 	require.NoError(t, svc.Upload(testCtx(), payload, rc))
-	require.True(t, rc.closed)
+	rc.AssertExpectations(t)
+	mockfs.AssertExpectations(t)
 }
 
-func TestFilesService_Upload_ClosesBodyOnValidationFailure(t *testing.T) {
+func TestFilesService_Upload_ClosesBodyOnFileServiceFailure(t *testing.T) {
 	body := "id,name\n1,foo\n"
 	payload := &files.UploadPayload{
 		Filename:    "users.csv",
 		Size:        int64(len(body)),
 		ContentType: "text/csv",
-		Checksum:    checksumOf("mismatched"),
+		Checksum:    checksumOf(body),
 	}
 
-	rc := &trackedCloser{Reader: strings.NewReader(body)}
+	rc := &mockReadCloser{Reader: strings.NewReader(body)}
+	rc.On("Close").Return(nil)
 
-	svc := NewFilesService()
+	mockfs := new(mockFileService)
+	mockfs.On("Upload", mock.Anything, expectedDownstreamPayload(payload), mock.Anything).
+		Return(errors.New("s3 unreachable"))
+
+	svc := NewFilesSvc(mockfs)
 	require.Error(t, svc.Upload(testCtx(), payload, rc))
-	require.True(t, rc.closed)
+	rc.AssertExpectations(t)
+	mockfs.AssertExpectations(t)
 }

@@ -3,7 +3,10 @@ package logger
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"os"
+
+	"goa.design/goa/v3/middleware"
 )
 
 type key int
@@ -31,4 +34,18 @@ func FromCtx(ctx context.Context) *slog.Logger {
 		return log.(*slog.Logger)
 	}
 	panic("context without logger")
+}
+
+func RequestMiddleware(log *slog.Logger) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if reqID := r.Context().Value(middleware.RequestIDKey); reqID != nil {
+				rlog := log.With(slog.String("reqID", reqID.(string)))
+				ctx := context.WithValue(r.Context(), loggerKey, rlog)
+				next.ServeHTTP(w, r.WithContext(ctx))
+			} else {
+				next.ServeHTTP(w, r)
+			}
+		})
+	}
 }

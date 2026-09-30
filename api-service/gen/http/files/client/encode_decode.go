@@ -69,7 +69,7 @@ func EncodeUploadRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 		}
 		{
 			head := p.Checksum
-			req.Header.Set("X-Checksum", head)
+			req.Header.Set("X-Checksum-Sha256", head)
 		}
 		return nil
 	}

@@ -13,6 +13,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"unicode/utf8"
 
 	files "github.com/aleksandarv/file-uploader/api-service/gen/files"
 	goahttp "goa.design/goa/v3/http"
@@ -44,7 +45,13 @@ func DecodeUploadRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		if filename == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("filename", "header"))
 		}
-		err = goa.MergeErrors(err, goa.ValidatePattern("filename", filename, "^[A-Za-z0-9._-]+\\.csv$"))
+		err = goa.MergeErrors(err, goa.ValidatePattern("filename", filename, "^[A-Za-z0-9][A-Za-z0-9_-]*(\\.[A-Za-z0-9_-]+)*\\.csv$"))
+		if utf8.RuneCountInString(filename) < 5 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("filename", filename, utf8.RuneCountInString(filename), 5, true))
+		}
+		if utf8.RuneCountInString(filename) > 255 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("filename", filename, utf8.RuneCountInString(filename), 255, false))
+		}
 		{
 			sizeRaw := r.Header.Get("Content-Length")
 			if sizeRaw == "" {
@@ -69,11 +76,17 @@ func DecodeUploadRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.
 		if !(contentType == "text/csv") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("contentType", contentType, []any{"text/csv"}))
 		}
-		checksum = r.Header.Get("X-Checksum")
+		checksum = r.Header.Get("X-Checksum-Sha256")
 		if checksum == "" {
 			err = goa.MergeErrors(err, goa.MissingFieldError("checksum", "header"))
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("checksum", checksum, "^[a-f0-9]{64}$"))
+		if utf8.RuneCountInString(checksum) < 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("checksum", checksum, utf8.RuneCountInString(checksum), 64, true))
+		}
+		if utf8.RuneCountInString(checksum) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("checksum", checksum, utf8.RuneCountInString(checksum), 64, false))
+		}
 		if err != nil {
 			return payload, err
 		}
