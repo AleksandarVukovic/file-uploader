@@ -1,0 +1,30 @@
+services:
+  file-service:
+    build:
+      context: .
+      dockerfile: file-service/Dockerfile
+    ports:
+      - "8081:8080"
+    environment:
+      PORT: "8080"
+      DEBUG: ${DEBUG:-false}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME:?}
+      AWS_PROFILE: ${AWS_PROFILE:?}
+      AWS_REGION: ${AWS_REGION:?}
+    volumes:
+      # reuse credentials from local env
+      - ~/.aws:/home/appuser/.aws:ro
+
+  api-service:
+    build:
+      context: .
+      dockerfile: api-service/Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      DEBUG: ${DEBUG:-false}
+      FILE_SERVICE_URL: http://file-service:8080
+    depends_on:
+      file-service:
+        condition: service_healthy
