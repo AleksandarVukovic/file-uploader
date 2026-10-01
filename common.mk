@@ -17,6 +17,7 @@ COVERAGE_THRESHOLD ?= 70.0
 
 TEST_EXCLUDE ?= /(gen|design|cmd|test)(/|$$)
 TEST_PKGS = $(shell go list ./... | grep -vE '$(TEST_EXCLUDE)')
+INTEGRATION_TEST_TIMEOUT ?= 60s
 
 # goa variables
 GOA_VERSION := v3.32.0
@@ -24,7 +25,7 @@ GOA_CMD := goa.design/goa/v3/cmd/goa
 GOA_DESIGN_PKG ?= $(GO_MODULE_NAME)/$(SERVICE_NAME)/design
 GOA_GEN_OUTPUT ?= $(PROJECT_ROOT)/$(SERVICE_NAME)
 
-.PHONY: all build test gotest fmt vet goenv coverage clean docker-build docker-push goa-install generate
+.PHONY: all build test gotest test-integration gotest-integration fmt vet goenv coverage clean docker-build docker-push goa-install generate
 
 all: test coverage build
 
@@ -35,6 +36,12 @@ test: goenv fmt vet gotest
 
 gotest:
 	go test -v -race -timeout=30s $(TEST_PKGS)
+
+test-integration: goenv fmt vet gotest-integration
+
+# run both i.e. unit and integration tests
+gotest-integration:
+	go test -tags=integration -v -race -timeout=$(INTEGRATION_TEST_TIMEOUT) $(TEST_PKGS)
 
 fmt:
 	go fmt ./...
@@ -67,6 +74,7 @@ docker-push: docker-build
 goa-install:
 	go install $(GOA_CMD)@$(GOA_VERSION)
 	go get $(GOA_CMD)@$(GOA_VERSION)
+	go mod tidy
 
 generate: goa-install
 	go run $(GOA_CMD) gen $(GOA_DESIGN_PKG) -o $(GOA_GEN_OUTPUT)
