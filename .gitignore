@@ -20,8 +20,8 @@ coverage.*
 *.coverprofile
 profile.cov
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
+# Dependency directories
+vendor/
 
 # Go workspace file
 go.work
@@ -29,6 +29,9 @@ go.work.sum
 
 # env file
 .env
+
+# local generated dev certs (see scripts/gen-dev-certs.sh)
+certs/
 
 # Editor/IDE
 # .idea/

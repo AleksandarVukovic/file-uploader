@@ -3,6 +3,8 @@
 package api
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"io"
@@ -31,13 +33,17 @@ func loadTestdata(t *testing.T, name string) string {
 	return string(b)
 }
 
-func newAPIServer(t *testing.T, fileServiceURL string) *httptest.Server {
+func newAPIServer(t *testing.T, fileService *httptest.Server) *httptest.Server {
 	t.Helper()
 
-	fsURL, err := url.Parse(fileServiceURL)
+	fsURL, err := url.Parse(fileService.URL)
 	require.NoError(t, err)
 
-	fsClient := fileservice.NewClient(fsURL.Scheme, fsURL.Host, false, client.NewDoer(false))
+	pool := x509.NewCertPool()
+	pool.AddCert(fileService.Certificate())
+	tlsCfg := &tls.Config{RootCAs: pool}
+
+	fsClient := fileservice.NewClient(fsURL.Scheme, fsURL.Host, false, client.NewDoer(false, tlsCfg))
 	filesSvc := NewFilesSvc(fsClient)
 	handler := Routes(logger.NewLogger(false), filesSvc, NewHealthSvc())
 
@@ -69,7 +75,7 @@ func TestUploadEndpoint_Success(t *testing.T) {
 		gotChecksum string
 		gotBody     []byte
 	)
-	fakeFileService := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	fakeFileService := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotFilename = r.Header.Get("Content-Disposition")
 		gotSize = r.Header.Get("X-File-Size")
 		gotChecksum = r.Header.Get("X-Checksum-Sha256")
@@ -80,7 +86,7 @@ func TestUploadEndpoint_Success(t *testing.T) {
 	}))
 	defer fakeFileService.Close()
 
-	apiSrv := newAPIServer(t, fakeFileService.URL)
+	apiSrv := newAPIServer(t, fakeFileService)
 	defer apiSrv.Close()
 
 	req := newUploadRequest(t, apiSrv.URL, "users.csv", "text/csv", checksum, body)
@@ -101,7 +107,7 @@ func TestUploadEndpoint_FileServiceRejectsBadRequest(t *testing.T) {
 	body := loadTestdata(t, "users.csv")
 	checksum := checksumOf(body)
 
-	fakeFileService := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	fakeFileService := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.Copy(io.Discard, r.Body)
 
 		svcErr := fsfiles.MakeBadRequest(errors.New("File size does not match declared size"))
@@ -112,7 +118,7 @@ func TestUploadEndpoint_FileServiceRejectsBadRequest(t *testing.T) {
 	}))
 	defer fakeFileService.Close()
 
-	apiSrv := newAPIServer(t, fakeFileService.URL)
+	apiSrv := newAPIServer(t, fakeFileService)
 	defer apiSrv.Close()
 
 	req := newUploadRequest(t, apiSrv.URL, "users.csv", "text/csv", checksum, body)
@@ -130,13 +136,13 @@ func TestUploadEndpoint_RejectsOversizedDeclaredSize(t *testing.T) {
 	checksum := checksumOf(body)
 
 	fileServiceCalled := false
-	fakeFileService := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	fakeFileService := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fileServiceCalled = true
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer fakeFileService.Close()
 
-	apiSrv := newAPIServer(t, fakeFileService.URL)
+	apiSrv := newAPIServer(t, fakeFileService)
 	defer apiSrv.Close()
 
 	req := newUploadRequest(t, apiSrv.URL, "users.csv", "text/csv", checksum, body)

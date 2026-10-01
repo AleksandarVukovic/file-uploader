@@ -29,12 +29,12 @@ WORKDIR /home/appuser
 
 COPY --from=builder --chown=appuser:appgroup /file-service/bin/file-service ./file-service
 
-ENV PORT=8080
+ENV HEALTH_PORT=8080
 
-EXPOSE $PORT
+EXPOSE $HEALTH_PORT
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-CMD wget -q -O /dev/null "http://localhost:$PORT/health" || exit 1
+CMD wget -q -O /dev/null "http://localhost:$HEALTH_PORT/health" || exit 1
 
 USER appuser
 
