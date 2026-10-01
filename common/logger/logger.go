@@ -33,19 +33,20 @@ func FromCtx(ctx context.Context) *slog.Logger {
 	if log := ctx.Value(loggerKey); log != nil {
 		return log.(*slog.Logger)
 	}
-	panic("context without logger")
+	panic("logger: context without logger")
 }
 
-func RequestMiddleware(log *slog.Logger) func(next http.Handler) http.Handler {
+func RequestMiddleware(log *slog.Logger, reqIDMandatory bool) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if reqID := r.Context().Value(middleware.RequestIDKey); reqID != nil {
-				rlog := log.With(slog.String("reqID", reqID.(string)))
-				ctx := context.WithValue(r.Context(), loggerKey, rlog)
-				next.ServeHTTP(w, r.WithContext(ctx))
-			} else {
-				next.ServeHTTP(w, r)
+			rlog := log
+			reqID, ok := r.Context().Value(middleware.RequestIDKey).(string)
+			if ok {
+				rlog = log.With(slog.String("reqID", reqID))
+			} else if reqIDMandatory {
+				panic("logger: context without request ID")
 			}
+			next.ServeHTTP(w, r.WithContext(WithCtx(r.Context(), rlog)))
 		})
 	}
 }
