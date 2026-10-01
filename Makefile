@@ -5,7 +5,7 @@ SERVICES = api-service \
 			file-processing-service \
 			user-service
 
-.PHONY: all all-services run common-pkg-test
+.PHONY: all all-services run common-pkg-test certs
 
 # Build each service by calling `make all`
 all: common-pkg-test
@@ -33,6 +33,9 @@ all-services:
 
 run:
 	docker compose -f docker-compose.local.yml up --build
+
+certs:
+	./scripts/gen-dev-certs.sh
 
 common-pkg-test:
 	@echo "********************************"; \

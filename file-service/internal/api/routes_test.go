@@ -77,11 +77,11 @@ func lastLoggedReqID(t *testing.T, logs *bytes.Buffer) string {
 	return entry.ReqID
 }
 
-func TestRoutes_HealthPath_Mounted(t *testing.T) {
+func TestHealthRoutes_HealthPath_Mounted(t *testing.T) {
 	t.Parallel()
 
 	log, _ := newBufferLogger()
-	srv := httptest.NewServer(Routes(log, panicFilesService{}, NewHealthSvc()))
+	srv := httptest.NewServer(HealthRoutes(log, NewHealthSvc()))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + healthPath)
@@ -90,11 +90,40 @@ func TestRoutes_HealthPath_Mounted(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
+func TestHealthRoutes_DoesNotMountFilesEndpoint(t *testing.T) {
+	t.Parallel()
+
+	log, _ := newBufferLogger()
+	srv := httptest.NewServer(HealthRoutes(log, NewHealthSvc()))
+	defer srv.Close()
+
+	req := newMinimalUploadRequest(t, srv.URL, nil)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusNotFound, resp.StatusCode, "the health-only handler must not expose the files upload route")
+}
+
+func TestRoutes_DoesNotMountHealthEndpoint(t *testing.T) {
+	t.Parallel()
+
+	log, _ := newBufferLogger()
+	srv := httptest.NewServer(Routes(log, panicFilesService{}))
+	defer srv.Close()
+
+	resp, err := http.Get(srv.URL + healthPath)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusNotFound, resp.StatusCode, "the files-only handler must not expose the health route")
+}
+
 func TestRoutes_PanicRecovery_FilesEndpoint(t *testing.T) {
 	t.Parallel()
 
 	log, logs := newBufferLogger()
-	srv := httptest.NewServer(Routes(log, panicFilesService{}, NewHealthSvc()))
+	srv := httptest.NewServer(Routes(log, panicFilesService{}))
 	defer srv.Close()
 
 	req := newMinimalUploadRequest(t, srv.URL, map[string]string{"X-Request-Id": "req-1"})
@@ -107,11 +136,11 @@ func TestRoutes_PanicRecovery_FilesEndpoint(t *testing.T) {
 	require.Equal(t, "req-1", lastLoggedReqID(t, logs))
 }
 
-func TestRoutes_PanicRecovery_HealthEndpoint(t *testing.T) {
+func TestHealthRoutes_PanicRecovery(t *testing.T) {
 	t.Parallel()
 
 	log, _ := newBufferLogger()
-	srv := httptest.NewServer(Routes(log, panicFilesService{}, panicHealthService{}))
+	srv := httptest.NewServer(HealthRoutes(log, panicHealthService{}))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + healthPath)
@@ -132,7 +161,7 @@ func TestRoutes_RequestID_RequiredForFilesEndpoint(t *testing.T) {
 		fileServiceCalled = true
 		return body.Close()
 	})
-	srv := httptest.NewServer(Routes(log, svc, NewHealthSvc()))
+	srv := httptest.NewServer(Routes(log, svc))
 	defer srv.Close()
 
 	req := newMinimalUploadRequest(t, srv.URL, nil)
@@ -148,7 +177,7 @@ func TestRoutes_RequestID_PropagatesIncomingHeader(t *testing.T) {
 	t.Parallel()
 
 	log, logs := newBufferLogger()
-	srv := httptest.NewServer(Routes(log, panicFilesService{}, NewHealthSvc()))
+	srv := httptest.NewServer(Routes(log, panicFilesService{}))
 	defer srv.Close()
 
 	req := newMinimalUploadRequest(t, srv.URL, map[string]string{"X-Request-Id": "custom-request-id-123"})

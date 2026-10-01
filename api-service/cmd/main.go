@@ -17,6 +17,7 @@ import (
 	"github.com/aleksandarv/file-uploader/api-service/internal/fileservice"
 	"github.com/aleksandarv/file-uploader/common/http/client"
 	"github.com/aleksandarv/file-uploader/common/logger"
+	"github.com/aleksandarv/file-uploader/common/tls"
 )
 
 func main() {
@@ -24,10 +25,16 @@ func main() {
 		debug          bool
 		port           int
 		fileServiceURL string
+		tlsCertFile    string
+		tlsKeyFile     string
+		tlsCACertFile  string
 	)
 	flag.BoolVar(&debug, "debug", false, "Enable debug mode with verbose logging")
 	flag.IntVar(&port, "port", 8080, "HTTP port")
-	flag.StringVar(&fileServiceURL, "fileServiceURL", "http://localhost:8081", "URL of the file-service")
+	flag.StringVar(&fileServiceURL, "fileServiceURL", "https://localhost:8443", "URL of the file-service")
+	flag.StringVar(&tlsCertFile, "tlsCertFile", "", "Path to this service's TLS client certificate")
+	flag.StringVar(&tlsKeyFile, "tlsKeyFile", "", "Path to this service's TLS client private key")
+	flag.StringVar(&tlsCACertFile, "tlsCACertFile", "", "Path to the CA certificate used to verify file-service's server certificate")
 	loadFlagsFromEnv()
 	flag.Parse()
 
@@ -41,7 +48,13 @@ func main() {
 		os.Exit(1)
 	}
 
-	fsClient := fileservice.NewClient(fsURL.Scheme, fsURL.Host, debug, client.NewDoer(debug))
+	tlsCfg, err := tls.NewClientConfig(tlsCertFile, tlsKeyFile, tlsCACertFile)
+	if err != nil {
+		log.Error("failed to build TLS config", "error", err)
+		os.Exit(1)
+	}
+
+	fsClient := fileservice.NewClient(fsURL.Scheme, fsURL.Host, debug, client.NewDoer(debug, tlsCfg))
 	filesService := api.NewFilesSvc(fsClient)
 
 	handler := api.Routes(log, filesService, api.NewHealthSvc())
@@ -98,6 +111,9 @@ func loadFlagsFromEnv() {
 		"DEBUG":            "debug",
 		"PORT":             "port",
 		"FILE_SERVICE_URL": "fileServiceURL",
+		"TLS_CERT_FILE":    "tlsCertFile",
+		"TLS_KEY_FILE":     "tlsKeyFile",
+		"TLS_CA_CERT_FILE": "tlsCACertFile",
 	}
 	for env, flagName := range envToFlag {
 		if val := os.Getenv(env); val != "" {

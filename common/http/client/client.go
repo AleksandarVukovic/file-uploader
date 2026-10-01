@@ -1,6 +1,7 @@
 package client
 
 import (
+	"crypto/tls"
 	"net"
 	"net/http"
 	"time"
@@ -11,11 +12,12 @@ import (
 
 const requestTimeout = 70 * time.Second
 
-func NewDoer(debug bool) goahttp.Doer {
+func NewDoer(debug bool, tlsConfig *tls.Config) goahttp.Doer {
 	transport := &http.Transport{
 		DialContext: (&net.Dialer{
 			Timeout: 10 * time.Second,
 		}).DialContext,
+		TLSClientConfig:       tlsConfig,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 4 * time.Second,
 		ResponseHeaderTimeout: 3 * time.Second,
