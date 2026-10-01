@@ -61,6 +61,7 @@ Run from a single service directory (or `make -C <service> <target>` from the ro
 | `make`             | Run tests, check coverage and build                          |
 | `make build`       | Build the binary into `./bin/`                               |
 | `make test`        | Run `go fmt`, `go vet` and tests with the race detector      |
+| `make test-integration` | Same as `make test`, plus any `//go:build integration` tests (tagged, same packages) |
 | `make coverage`    | Generate a coverage report; fails if total coverage is below 70% |
 | `make clean`       | Remove build and coverage artifacts                          |
 | `make generate`    | Run `goa gen` against the service's `design` package         |
@@ -86,12 +87,14 @@ ctx := logger.WithCtx(ctx, log)
 logger.FromCtx(ctx).Info("server started", "port", port)
 ```
 
-`FromCtx` panics if the context has no logger, so attach one early (e.g. in `main` or in middleware). `logger.RequestMiddleware` attaches a per-request logger tagged with the request ID once one has been populated on the context (see `common/http/middleware`).
+`FromCtx` panics if the context has no logger, so attach one early (e.g. in `main` or in middleware). `logger.RequestMiddleware(log, mandatory bool)` always attaches a per-request logger to the context — tagged with the request ID once one has been populated on the context, without that tag otherwise. If `mandatory` is `true` and no request ID is present by the time this middleware runs, it panics instead of silently logging without one, so a route wired with `mandatory=true` must have a request-ID-populating middleware (goa's `RequestID` or `RequireRequestID`, see below) ahead of it in the chain.
 
 ## Request IDs
 
 `common/http/middleware` propagates an `X-Request-Id` header across service calls:
 
-- `RequireRequestID()` rejects internal-service requests that arrive without one (used by `file-service`, which is never called directly by clients).
+- `RequireRequestID()` rejects internal-service requests that arrive without one (used by `file-service`'s files endpoint, which is never called directly by clients).
 - `PanicHandler()` recovers from panics in HTTP handlers and returns a 500 instead of crashing the process.
 - `common/http/client.NewDoer` returns a goa HTTP `Doer` that forwards the request ID from context onto outgoing requests, so `api-service` calling into `file-service` preserves the same ID end-to-end.
+
+Each service's `internal/api/routes.go` wires these per endpoint via `Routes(log, filesSvc, healthSvc) http.Handler` — the same function `cmd/main.go` and tests both call, so tests exercise the real middleware chain instead of a re-implementation of it. The two endpoint types are wired differently: the internal files endpoint treats a request ID as mandatory (`RequestMiddleware(log, true)`, paired with `RequireRequestID()` or a generating `RequestID` middleware), while `/health` does not (`RequestMiddleware(log, false)`), since external health probes (e.g. a kubelet liveness check) won't send one.
