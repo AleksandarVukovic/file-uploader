@@ -47,7 +47,7 @@ func newAPIServer(t *testing.T, fileServiceURL string) *httptest.Server {
 func newUploadRequest(t *testing.T, baseURL, filename, contentType, checksum, body string) *http.Request {
 	t.Helper()
 
-	req, err := http.NewRequest(http.MethodPost, baseURL+"/api/v1/files/upload", strings.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, baseURL+filesUploadPath, strings.NewReader(body))
 	require.NoError(t, err)
 
 	req.Header.Set("Content-Disposition", filename)
