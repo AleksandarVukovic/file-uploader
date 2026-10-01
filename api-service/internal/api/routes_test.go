@@ -14,7 +14,14 @@ import (
 
 	"github.com/aleksandarv/file-uploader/api-service/gen/files"
 	"github.com/aleksandarv/file-uploader/api-service/gen/health"
+	filessvr "github.com/aleksandarv/file-uploader/api-service/gen/http/files/server"
+	healthsvr "github.com/aleksandarv/file-uploader/api-service/gen/http/health/server"
 	"github.com/stretchr/testify/require"
+)
+
+var (
+	filesUploadPath = filessvr.UploadFilesPath()
+	healthPath      = healthsvr.HealthHealthPath()
 )
 
 type panicFilesService struct{}
@@ -38,7 +45,7 @@ func newMinimalUploadRequest(t *testing.T, baseURL string, extraHeaders map[stri
 	t.Helper()
 
 	body := strings.Repeat("x", 100)
-	req, err := http.NewRequest(http.MethodPost, baseURL+"/api/v1/files/upload", strings.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, baseURL+filesUploadPath, strings.NewReader(body))
 	require.NoError(t, err)
 
 	req.Header.Set("Content-Disposition", "dummy.csv")
@@ -71,7 +78,7 @@ func TestRoutes_HealthPath_Mounted(t *testing.T) {
 	srv := httptest.NewServer(Routes(log, panicFilesService{}, NewHealthSvc()))
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/health")
+	resp, err := http.Get(srv.URL + healthPath)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -101,7 +108,7 @@ func TestRoutes_PanicRecovery_HealthEndpoint(t *testing.T) {
 	srv := httptest.NewServer(Routes(log, panicFilesService{}, panicHealthService{}))
 	defer srv.Close()
 
-	resp, err := http.Get(srv.URL + "/health")
+	resp, err := http.Get(srv.URL + healthPath)
 	if err != nil {
 		t.Fatalf("health endpoint panic was not recovered into a response: %v", err)
 	}

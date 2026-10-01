@@ -19,7 +19,7 @@ func Routes(log *slog.Logger, filesSvc files.Service, healthSvc health.Service) 
 
 	filesSrv := filessvr.New(files.NewEndpoints(filesSvc), mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
 	filesSrv.Use(httpmiddleware.PanicHandler())
-	filesSrv.Use(logger.RequestMiddleware(log))
+	filesSrv.Use(logger.RequestMiddleware(log, true))
 	filesSrv.Use(middleware.PopulateRequestContext())
 	filesSrv.Use(middleware.RequestID(
 		middleware.UseXRequestIDHeaderOption(true),
@@ -32,12 +32,8 @@ func Routes(log *slog.Logger, filesSvc files.Service, healthSvc health.Service) 
 
 	healthSrv := healthsvr.New(health.NewEndpoints(healthSvc), mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
 	healthSrv.Use(httpmiddleware.PanicHandler())
-	healthSrv.Use(logger.RequestMiddleware(log))
-	healthSrv.Use(middleware.PopulateRequestContext())
-	healthSrv.Use(middleware.RequestID(
-		middleware.UseXRequestIDHeaderOption(true),
-		middleware.XRequestHeaderLimitOption(64),
-	))
+	healthSrv.Use(logger.RequestMiddleware(log, false))
+	// healthSrv.Use(middleware.PopulateRequestContext())
 	healthSrv.Mount(mux)
 	for _, m := range healthSrv.Mounts {
 		log.Debug("expose health API", "verb", m.Verb, "path", m.Pattern, "method", m.Method)
