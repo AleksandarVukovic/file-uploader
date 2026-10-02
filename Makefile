@@ -6,7 +6,7 @@ SERVICES = api-service \
 # 			file-processing-service \
 # 			user-service 
 
-.PHONY: all all-services run common-pkg-test certs
+.PHONY: all all-services run common-pkg-test certs clean
 
 # Build each service by calling `make all`
 all: common-pkg-test
@@ -37,6 +37,10 @@ run:
 
 certs:
 	./scripts/gen-dev-certs.sh
+
+clean:
+	rm -rf certs vendor
+	$(MAKE) all-services TARGET=clean
 
 common-pkg-test:
 	@echo "********************************"; \
