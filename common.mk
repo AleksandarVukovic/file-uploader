@@ -27,7 +27,7 @@ GOA_GEN_OUTPUT ?= $(PROJECT_ROOT)/$(SERVICE_NAME)
 
 .PHONY: all build test gotest test-integration gotest-integration fmt vet goenv coverage clean docker-build docker-push goa-install generate
 
-all: test coverage build
+all: test coverage gotest-integration build
 
 build:
 	go build -o $(BIN_DIR)/$(SERVICE_NAME) ./cmd/
