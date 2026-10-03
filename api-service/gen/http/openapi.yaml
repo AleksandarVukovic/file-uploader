@@ -121,7 +121,232 @@ paths:
                             timeout: false
             schemes:
                 - http
+    /login:
+        post:
+            tags:
+                - auth
+            summary: login auth
+            description: Authenticates a user and returns a JWT token.
+            operationId: auth#login
+            parameters:
+                - name: LoginRequestBody
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/AuthLoginRequestBody'
+                    required:
+                        - username
+                        - password
+            responses:
+                "200":
+                    description: OK response.
+                    schema:
+                        $ref: '#/definitions/AuthLoginResponseBody'
+                        required:
+                            - token
+                "401":
+                    description: 'invalid_credentials: Invalid username or password.'
+                    schema:
+                        $ref: '#/definitions/AuthLoginInvalidCredentialsResponseBody'
+                    examples:
+                        application/vnd.goa.error:
+                            fault: false
+                            id: 123abc
+                            message: parameter 'p' must be an integer
+                            name: invalid_credentials
+                            temporary: false
+                            timeout: false
+                "500":
+                    description: 'internal_error: Fault in the service.'
+                    schema:
+                        $ref: '#/definitions/AuthLoginInternalErrorResponseBody'
+                    examples:
+                        application/vnd.goa.error:
+                            fault: false
+                            id: 123abc
+                            message: parameter 'p' must be an integer
+                            name: internal_error
+                            temporary: false
+                            timeout: false
+                "503":
+                    description: 'unavailable: Service unavailable.'
+                    schema:
+                        $ref: '#/definitions/AuthLoginUnavailableResponseBody'
+                    examples:
+                        application/vnd.goa.error:
+                            fault: false
+                            id: 123abc
+                            message: parameter 'p' must be an integer
+                            name: unavailable
+                            temporary: false
+                            timeout: false
+            schemes:
+                - http
 definitions:
+    AuthLoginInternalErrorResponseBody:
+        title: 'Mediatype identifier: application/vnd.goa.error; view=default'
+        type: object
+        properties:
+            fault:
+                type: boolean
+                description: Is the error a server-side fault?
+                example: true
+            id:
+                type: string
+                description: ID is a unique identifier for this particular occurrence of the problem.
+                example: 123abc
+            message:
+                type: string
+                description: Message is a human-readable explanation specific to this occurrence of the problem.
+                example: parameter 'p' must be an integer
+            name:
+                type: string
+                description: Name is the name of this class of errors.
+                example: bad_request
+            temporary:
+                type: boolean
+                description: Is the error temporary?
+                example: false
+            timeout:
+                type: boolean
+                description: Is the error a timeout?
+                example: false
+        description: Error response result type (default view)
+        example:
+            fault: true
+            id: 123abc
+            message: parameter 'p' must be an integer
+            name: bad_request
+            temporary: false
+            timeout: false
+        required:
+            - name
+            - id
+            - message
+            - temporary
+            - timeout
+            - fault
+    AuthLoginInvalidCredentialsResponseBody:
+        title: 'Mediatype identifier: application/vnd.goa.error; view=default'
+        type: object
+        properties:
+            fault:
+                type: boolean
+                description: Is the error a server-side fault?
+                example: false
+            id:
+                type: string
+                description: ID is a unique identifier for this particular occurrence of the problem.
+                example: 123abc
+            message:
+                type: string
+                description: Message is a human-readable explanation specific to this occurrence of the problem.
+                example: parameter 'p' must be an integer
+            name:
+                type: string
+                description: Name is the name of this class of errors.
+                example: bad_request
+            temporary:
+                type: boolean
+                description: Is the error temporary?
+                example: false
+            timeout:
+                type: boolean
+                description: Is the error a timeout?
+                example: true
+        description: Error response result type (default view)
+        example:
+            fault: false
+            id: 123abc
+            message: parameter 'p' must be an integer
+            name: bad_request
+            temporary: false
+            timeout: true
+        required:
+            - name
+            - id
+            - message
+            - temporary
+            - timeout
+            - fault
+    AuthLoginRequestBody:
+        title: AuthLoginRequestBody
+        type: object
+        properties:
+            password:
+                type: string
+                description: Password of the user
+                example: s3cr3t#s
+                minLength: 8
+                maxLength: 64
+            username:
+                type: string
+                description: Username of the user
+                example: john_doe
+                pattern: ^[a-zA-Z0-9._-]+$
+                minLength: 3
+                maxLength: 50
+        example:
+            password: s3cr3t#s
+            username: john_doe
+        required:
+            - username
+            - password
+    AuthLoginResponseBody:
+        title: AuthLoginResponseBody
+        type: object
+        properties:
+            token:
+                type: string
+                description: JWT token for authenticated user
+                example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+        example:
+            token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+        required:
+            - token
+    AuthLoginUnavailableResponseBody:
+        title: 'Mediatype identifier: application/vnd.goa.error; view=default'
+        type: object
+        properties:
+            fault:
+                type: boolean
+                description: Is the error a server-side fault?
+                example: true
+            id:
+                type: string
+                description: ID is a unique identifier for this particular occurrence of the problem.
+                example: 123abc
+            message:
+                type: string
+                description: Message is a human-readable explanation specific to this occurrence of the problem.
+                example: parameter 'p' must be an integer
+            name:
+                type: string
+                description: Name is the name of this class of errors.
+                example: bad_request
+            temporary:
+                type: boolean
+                description: Is the error temporary?
+                example: true
+            timeout:
+                type: boolean
+                description: Is the error a timeout?
+                example: true
+        description: Error response result type (default view)
+        example:
+            fault: true
+            id: 123abc
+            message: parameter 'p' must be an integer
+            name: bad_request
+            temporary: true
+            timeout: true
+        required:
+            - name
+            - id
+            - message
+            - temporary
+            - timeout
+            - fault
     FilesUploadBadRequestResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object

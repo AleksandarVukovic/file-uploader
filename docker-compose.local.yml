@@ -29,6 +29,7 @@ services:
     environment:
       PORT: "8080"
       DEBUG: ${DEBUG:-false}
+      JWT_SECRET: ${JWT_SECRET:?}
       FILE_SERVICE_URL: https://file-service:8443
       TLS_CERT_FILE: /certs/api-service.pem
       TLS_KEY_FILE: /certs/api-service-key.pem

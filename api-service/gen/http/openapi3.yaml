@@ -132,6 +132,71 @@ paths:
                                 name: unavailable
                                 temporary: false
                                 timeout: false
+    /login:
+        post:
+            tags:
+                - auth
+            summary: login auth
+            description: Authenticates a user and returns a JWT token.
+            operationId: auth#login
+            requestBody:
+                description: Request body for login.
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/LoginRequestBody'
+                        example:
+                            password: s3cr3t#s
+                            username: john_doe
+            responses:
+                "200":
+                    description: OK response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/LoginResponseBody'
+                            example:
+                                token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+                "401":
+                    description: 'invalid_credentials: Invalid username or password.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: invalid_credentials
+                                temporary: false
+                                timeout: false
+                "500":
+                    description: 'internal_error: Fault in the service.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: internal_error
+                                temporary: false
+                                timeout: false
+                "503":
+                    description: 'unavailable: Service unavailable.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: unavailable
+                                temporary: false
+                                timeout: false
 components:
     schemas:
         Error:
@@ -187,8 +252,44 @@ components:
                 status: ok
             required:
                 - status
+        LoginRequestBody:
+            type: object
+            properties:
+                password:
+                    type: string
+                    description: Password of the user
+                    example: s3cr3t#s
+                    minLength: 8
+                    maxLength: 64
+                username:
+                    type: string
+                    description: Username of the user
+                    example: john_doe
+                    pattern: ^[a-zA-Z0-9._-]+$
+                    minLength: 3
+                    maxLength: 50
+            description: Request body for login.
+            example:
+                password: s3cr3t#s
+                username: john_doe
+            required:
+                - username
+                - password
+        LoginResponseBody:
+            type: object
+            properties:
+                token:
+                    type: string
+                    description: JWT token for authenticated user
+                    example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+            example:
+                token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
+            required:
+                - token
 tags:
     - name: files
       description: Service manages upload of single files.
+    - name: auth
+      description: Service provides authentication functionality.
     - name: health
       description: Service provides health check functionality.

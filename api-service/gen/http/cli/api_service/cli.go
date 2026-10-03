@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 
+	authc "github.com/aleksandarv/file-uploader/api-service/gen/http/auth/client"
 	filesc "github.com/aleksandarv/file-uploader/api-service/gen/http/files/client"
 	healthc "github.com/aleksandarv/file-uploader/api-service/gen/http/health/client"
 	goahttp "goa.design/goa/v3/http"
@@ -25,6 +26,7 @@ import (
 //	command (subcommand1|subcommand2|...)
 func UsageCommands() []string {
 	return []string{
+		"auth login",
 		"files upload",
 		"health health",
 	}
@@ -32,7 +34,8 @@ func UsageCommands() []string {
 
 // UsageExamples produces an example of a valid invocation of the CLI tool.
 func UsageExamples() string {
-	return os.Args[0] + " " + "files upload --filename \"users.csv\" --size 1048576 --content-type \"text/csv\" --checksum \"9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08\" --stream \"goa.png\"" + "\n" +
+	return os.Args[0] + " " + "auth login --body '{\n      \"password\": \"s3cr3t#s\",\n      \"username\": \"john_doe\"\n   }'" + "\n" +
+		os.Args[0] + " " + "files upload --filename \"users.csv\" --size 1048576 --content-type \"text/csv\" --checksum \"9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08\" --stream \"goa.png\"" + "\n" +
 		os.Args[0] + " " + "health health" + "\n" +
 		""
 }
@@ -66,6 +69,11 @@ func ParseEndpoint(
 	restore bool,
 ) (goa.Endpoint, any, error) {
 	var (
+		authFlags = flag.NewFlagSet("auth", flag.ContinueOnError)
+
+		authLoginFlags    = flag.NewFlagSet("login", flag.ExitOnError)
+		authLoginBodyFlag = new(cliStringFlag)
+
 		filesFlags = flag.NewFlagSet("files", flag.ContinueOnError)
 
 		filesUploadFlags           = flag.NewFlagSet("upload", flag.ExitOnError)
@@ -79,10 +87,14 @@ func ParseEndpoint(
 
 		healthHealthFlags = flag.NewFlagSet("health", flag.ExitOnError)
 	)
+	authLoginFlags.Var(authLoginBodyFlag, "body", "")
 	filesUploadFlags.Var(filesUploadFilenameFlag, "filename", "")
 	filesUploadFlags.Var(filesUploadSizeFlag, "size", "")
 	filesUploadFlags.Var(filesUploadChecksumFlag, "checksum", "")
 	filesUploadFlags.Var(filesUploadStreamFlag, "stream", "path to file containing the streamed request body")
+
+	authFlags.Usage = authUsage
+	authLoginFlags.Usage = authLoginUsage
 
 	filesFlags.Usage = filesUsage
 	filesUploadFlags.Usage = filesUploadUsage
@@ -105,6 +117,8 @@ func ParseEndpoint(
 	{
 		svcn = flag.Arg(0)
 		switch svcn {
+		case "auth":
+			svcf = authFlags
 		case "files":
 			svcf = filesFlags
 		case "health":
@@ -124,6 +138,13 @@ func ParseEndpoint(
 	{
 		epn = svcf.Arg(0)
 		switch svcn {
+		case "auth":
+			switch epn {
+			case "login":
+				epf = authLoginFlags
+
+			}
+
 		case "files":
 			switch epn {
 			case "upload":
@@ -158,6 +179,13 @@ func ParseEndpoint(
 	)
 	{
 		switch svcn {
+		case "auth":
+			c := authc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "login":
+				endpoint = c.Login()
+				data, err = authc.BuildLoginPayload(authLoginBodyFlag.value)
+			}
 		case "files":
 			c := filesc.NewClient(scheme, host, doer, enc, dec, restore)
 			switch epn {
@@ -185,6 +213,34 @@ func ParseEndpoint(
 	}
 
 	return endpoint, data, nil
+}
+
+// authUsage displays the usage of the auth command and its subcommands.
+func authUsage() {
+	fmt.Fprintln(os.Stderr, `Service provides authentication functionality.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] auth COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    login: Authenticates a user and returns a JWT token.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s auth COMMAND --help\n", os.Args[0])
+}
+func authLoginUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] auth login", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Authenticates a user and returns a JWT token.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth login --body '{\n      \"password\": \"s3cr3t#s\",\n      \"username\": \"john_doe\"\n   }'")
 }
 
 // filesUsage displays the usage of the files command and its subcommands.
