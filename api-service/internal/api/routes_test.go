@@ -11,11 +11,13 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aleksandarv/file-uploader/api-service/gen/files"
 	"github.com/aleksandarv/file-uploader/api-service/gen/health"
 	filessvr "github.com/aleksandarv/file-uploader/api-service/gen/http/files/server"
 	healthsvr "github.com/aleksandarv/file-uploader/api-service/gen/http/health/server"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 )
 
@@ -23,6 +25,22 @@ var (
 	filesUploadPath = filessvr.UploadFilesPath()
 	healthPath      = healthsvr.HealthHealthPath()
 )
+
+var testJWTSecret = []byte("ut-test-secret")
+
+func validToken(t *testing.T, secret []byte) string {
+	t.Helper()
+
+	now := time.Now()
+	claims := jwt.RegisteredClaims{
+		Subject:   "test-user",
+		IssuedAt:  jwt.NewNumericDate(now),
+		ExpiresAt: jwt.NewNumericDate(now.Add(time.Minute)),
+	}
+	signed, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(secret)
+	require.NoError(t, err)
+	return signed
+}
 
 type panicFilesService struct{}
 
@@ -52,6 +70,7 @@ func newMinimalUploadRequest(t *testing.T, baseURL string, extraHeaders map[stri
 	req.Header.Set("Content-Length", strconv.Itoa(len(body)))
 	req.Header.Set("Content-Type", "text/csv")
 	req.Header.Set("X-Checksum-Sha256", strings.Repeat("a", 64))
+	req.Header.Set("Authorization", "Bearer "+validToken(t, testJWTSecret))
 	for k, v := range extraHeaders {
 		req.Header.Set(k, v)
 	}
@@ -75,7 +94,7 @@ func TestRoutes_HealthPath_Mounted(t *testing.T) {
 	t.Parallel()
 
 	log, _ := newBufferLogger()
-	srv := httptest.NewServer(Routes(log, panicFilesService{}, NewHealthSvc()))
+	srv := httptest.NewServer(Routes(log, testJWTSecret, panicFilesService{}, NewHealthSvc(), NewAuthSvc(testJWTSecret)))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + healthPath)
@@ -88,7 +107,7 @@ func TestRoutes_PanicRecovery_FilesEndpoint(t *testing.T) {
 	t.Parallel()
 
 	log, logs := newBufferLogger()
-	srv := httptest.NewServer(Routes(log, panicFilesService{}, NewHealthSvc()))
+	srv := httptest.NewServer(Routes(log, testJWTSecret, panicFilesService{}, NewHealthSvc(), NewAuthSvc(testJWTSecret)))
 	defer srv.Close()
 
 	req := newMinimalUploadRequest(t, srv.URL, nil)
@@ -105,7 +124,7 @@ func TestRoutes_PanicRecovery_HealthEndpoint(t *testing.T) {
 	t.Parallel()
 
 	log, _ := newBufferLogger()
-	srv := httptest.NewServer(Routes(log, panicFilesService{}, panicHealthService{}))
+	srv := httptest.NewServer(Routes(log, testJWTSecret, panicFilesService{}, panicHealthService{}, NewAuthSvc(testJWTSecret)))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + healthPath)
@@ -121,7 +140,7 @@ func TestRoutes_RequestID_HonorsIncomingHeader(t *testing.T) {
 	t.Parallel()
 
 	log, logs := newBufferLogger()
-	srv := httptest.NewServer(Routes(log, panicFilesService{}, NewHealthSvc()))
+	srv := httptest.NewServer(Routes(log, testJWTSecret, panicFilesService{}, NewHealthSvc(), NewAuthSvc(testJWTSecret)))
 	defer srv.Close()
 
 	req := newMinimalUploadRequest(t, srv.URL, map[string]string{"X-Request-Id": "custom-request-id-123"})
@@ -136,7 +155,7 @@ func TestRoutes_RequestID_TruncatesLongIncomingHeader(t *testing.T) {
 	t.Parallel()
 
 	log, logs := newBufferLogger()
-	srv := httptest.NewServer(Routes(log, panicFilesService{}, NewHealthSvc()))
+	srv := httptest.NewServer(Routes(log, testJWTSecret, panicFilesService{}, NewHealthSvc(), NewAuthSvc(testJWTSecret)))
 	defer srv.Close()
 
 	longID := strings.Repeat("a", 100)
@@ -152,7 +171,7 @@ func TestRoutes_RequestID_GeneratesUniqueIDsWhenHeaderAbsent(t *testing.T) {
 	t.Parallel()
 
 	log, logs := newBufferLogger()
-	srv := httptest.NewServer(Routes(log, panicFilesService{}, NewHealthSvc()))
+	srv := httptest.NewServer(Routes(log, testJWTSecret, panicFilesService{}, NewHealthSvc(), NewAuthSvc(testJWTSecret)))
 	defer srv.Close()
 
 	resp1, err := http.DefaultClient.Do(newMinimalUploadRequest(t, srv.URL, nil))

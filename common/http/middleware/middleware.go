@@ -33,7 +33,7 @@ func PanicHandler() func(http.Handler) http.Handler {
 				if err := recover(); err != nil {
 					log := logger.FromCtx(r.Context())
 					// TODO: add alert
-					log.Error("panic recovered: %v", err)
+					log.Error("panic recovered", "err", err)
 					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 				}
 			}()

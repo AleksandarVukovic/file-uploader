@@ -42,6 +42,12 @@ func main() {
 	ctx := logger.WithCtx(context.Background(), log)
 	log.Info("starting application")
 
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		log.Error("JWT_SECRET environment variable is required")
+		os.Exit(1)
+	}
+
 	fsURL, err := url.Parse(fileServiceURL)
 	if err != nil {
 		log.Error("invalid fileServiceURL", "error", err)
@@ -56,8 +62,9 @@ func main() {
 
 	fsClient := fileservice.NewClient(fsURL.Scheme, fsURL.Host, debug, client.NewDoer(debug, tlsCfg))
 	filesService := api.NewFilesSvc(fsClient)
+	authService := api.NewAuthSvc([]byte(jwtSecret))
 
-	handler := api.Routes(log, filesService, api.NewHealthSvc())
+	handler := api.Routes(log, []byte(jwtSecret), filesService, api.NewHealthSvc(), authService)
 
 	addr := ":" + strconv.Itoa(port)
 	srv := &http.Server{

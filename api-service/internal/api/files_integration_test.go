@@ -45,7 +45,7 @@ func newAPIServer(t *testing.T, fileService *httptest.Server) *httptest.Server {
 
 	fsClient := fileservice.NewClient(fsURL.Scheme, fsURL.Host, false, client.NewDoer(false, tlsCfg))
 	filesSvc := NewFilesSvc(fsClient)
-	handler := Routes(logger.NewLogger(false), filesSvc, NewHealthSvc())
+	handler := Routes(logger.NewLogger(false), testJWTSecret, filesSvc, NewHealthSvc(), NewAuthSvc(testJWTSecret))
 
 	return httptest.NewServer(handler)
 }
@@ -60,6 +60,7 @@ func newUploadRequest(t *testing.T, baseURL, filename, contentType, checksum, bo
 	req.Header.Set("Content-Length", strconv.Itoa(len(body)))
 	req.Header.Set("Content-Type", contentType)
 	req.Header.Set("X-Checksum-Sha256", checksum)
+	req.Header.Set("Authorization", "Bearer "+validToken(t, testJWTSecret))
 	return req
 }
 
