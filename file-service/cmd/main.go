@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strconv"
@@ -15,6 +16,8 @@ import (
 	"github.com/aleksandarv/file-uploader/common/logger"
 	"github.com/aleksandarv/file-uploader/common/tls"
 	"github.com/aleksandarv/file-uploader/file-service/internal/api"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	awsc "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
@@ -25,6 +28,7 @@ func main() {
 		healthPort    int
 		mtlsPort      int
 		s3BucketName  string
+		s3Endpoint    string
 		tlsCertFile   string
 		tlsKeyFile    string
 		tlsCACertFile string
@@ -33,6 +37,7 @@ func main() {
 	flag.IntVar(&healthPort, "healthPort", 8080, "HTTP port for the health endpoint")
 	flag.IntVar(&mtlsPort, "mtlsPort", 8443, "mTLS port for the internal files API")
 	flag.StringVar(&s3BucketName, "bucketName", "", "Name of the S3 bucket where files will be saved")
+	flag.StringVar(&s3Endpoint, "s3Endpoint", "", "Override the S3 endpoint (e.g. for LocalStack); leave empty to use AWS's default resolver")
 	flag.StringVar(&tlsCertFile, "tlsCertFile", "", "Path to this service's TLS certificate")
 	flag.StringVar(&tlsKeyFile, "tlsKeyFile", "", "Path to this service's TLS private key")
 	flag.StringVar(&tlsCACertFile, "tlsCACertFile", "", "Path to the CA certificate used to verify client certificates")
@@ -48,7 +53,15 @@ func main() {
 		log.Error("failed to load AWS config", "err", err)
 		os.Exit(1)
 	}
-	s3Client := s3.NewFromConfig(cfg)
+	s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
+		if s3Endpoint != "" {
+			o.BaseEndpoint = aws.String(s3Endpoint)
+			o.UsePathStyle = true
+			if isPlainHTTP(s3Endpoint) {
+				o.APIOptions = append(o.APIOptions, v4.SwapComputePayloadSHA256ForUnsignedPayloadMiddleware)
+			}
+		}
+	})
 
 	filesService := api.NewFilesService(s3BucketName, s3Client)
 
@@ -117,12 +130,18 @@ func main() {
 	wg.Wait()
 }
 
+func isPlainHTTP(endpoint string) bool {
+	u, err := url.Parse(endpoint)
+	return err == nil && u.Scheme == "http"
+}
+
 func loadFlagsFromEnv() {
 	envToFlag := map[string]string{
 		"DEBUG":            "debug",
 		"HEALTH_PORT":      "healthPort",
 		"MTLS_PORT":        "mtlsPort",
 		"S3_BUCKET_NAME":   "bucketName",
+		"S3_ENDPOINT":      "s3Endpoint",
 		"TLS_CERT_FILE":    "tlsCertFile",
 		"TLS_KEY_FILE":     "tlsKeyFile",
 		"TLS_CA_CERT_FILE": "tlsCACertFile",

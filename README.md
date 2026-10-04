@@ -5,7 +5,7 @@ A Go mono repo of independent microservices for uploading files to S3. `api-serv
 ## Requirements
 
 - Go 1.26+
-- Docker (optional, for building images / running locally)
+- Docker (required for `make test-e2e` and `file-service`'s mTLS integration tests; optional otherwise, e.g. for building images or `make run`)
 - AWS credentials with access to the target S3 bucket (for `file-service`)
 
 ## Services
@@ -59,6 +59,16 @@ make run
 
 `make run` builds and starts `api-service` and `file-service` via `docker-compose.local.yml`. `file-service` mounts your local `~/.aws` credentials read-only, so make sure `AWS_PROFILE` is configured on the host. Copy each service's `.env.example` to `.env` and fill in the required values (`S3_BUCKET_NAME`, `AWS_PROFILE`, `AWS_REGION`, `JWT_SECRET`) — the root `.env` feeds `docker-compose.local.yml` directly, and `api-service` will refuse to start without `JWT_SECRET` set.
 
+## End-to-end tests
+
+`test/integration/` holds a Ginkgo+Gomega end-to-end suite (build-tagged `e2e`) that brings up a real `api-service` + `file-service` stack plus a LocalStack container (S3 only) using testcontainers-go's compose module, then drives it over plain HTTP exactly like a real client would — login, then upload — asserting against the object actually stored in S3 rather than mocks. It only ever calls `api-service`'s public port.
+
+```sh
+make test-e2e
+```
+
+This regenerates certs (`make certs`) and runs `go test -tags=e2e ./test/integration/...`; it needs Docker and isn't part of `make`/`make all`, since it builds and starts real containers rather than running in-process. `file-service` picks up an optional `S3_ENDPOINT` env var (unused — and a no-op — in production) to point its S3 client at LocalStack instead of real AWS for this suite.
+
 ## Make targets
 
 Run from the repo root:
@@ -68,6 +78,7 @@ Run from the repo root:
 | `make`                           | Build+test every service and `common/`                             |
 | `make certs`                     | Generate local dev CA + leaf certs for mTLS between services        |
 | `make run`                       | Run `api-service` + `file-service` locally via docker compose       |
+| `make test-e2e`                  | Run the `test/integration/` e2e suite against a real api-service + file-service + LocalStack stack (see [End-to-end tests](#end-to-end-tests)) |
 | `make all-services TARGET=<t>`   | Run `make <t>` in every service                                    |
 | `make common-pkg-test`           | Vet + race-test only `common/...`                                  |
 

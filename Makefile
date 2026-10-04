@@ -6,7 +6,7 @@ SERVICES = api-service \
 # 			file-processing-service \
 # 			user-service 
 
-.PHONY: all all-services run common-pkg-test certs clean
+.PHONY: all all-services run common-pkg-test certs clean test-e2e
 
 # Build each service by calling `make all`
 all: common-pkg-test
@@ -37,6 +37,9 @@ run:
 
 certs:
 	./scripts/gen-dev-certs.sh
+
+test-e2e: certs
+	go test -tags=e2e -v -timeout=300s ./test/integration/...
 
 clean:
 	rm -rf certs vendor
