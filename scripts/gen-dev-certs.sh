@@ -28,5 +28,6 @@ openssl x509 -req -in api-service.csr -CA ca.pem -CAkey ca-key.pem -CAcreateseri
   -extfile <(printf "extendedKeyUsage=clientAuth")
 
 rm -f file-service.csr api-service.csr ca.srl
+chmod 644 ca.pem file-service.pem file-service-key.pem api-service.pem api-service-key.pem
 
 echo "Done. Certs written to $CERTS_DIR"

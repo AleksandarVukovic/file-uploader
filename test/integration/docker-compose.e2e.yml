@@ -1,0 +1,57 @@
+services:
+  localstack:
+    image: localstack/localstack:4.0
+    ports:
+      - "4566"
+    environment:
+      SERVICES: s3
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:4566/_localstack/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  file-service:
+    build:
+      context: ../..
+      dockerfile: file-service/Dockerfile
+    ports:
+      - "8080"
+    environment:
+      HEALTH_PORT: "8080"
+      MTLS_PORT: "8443"
+      DEBUG: "false"
+      S3_BUCKET_NAME: e2e-test-bucket
+      S3_ENDPOINT: http://localstack:4566
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+      AWS_REGION: us-east-1
+      TLS_CERT_FILE: /certs/file-service.pem
+      TLS_KEY_FILE: /certs/file-service-key.pem
+      TLS_CA_CERT_FILE: /certs/ca.pem
+    volumes:
+      - ../../certs:/certs:ro
+    depends_on:
+      localstack:
+        condition: service_healthy
+
+  api-service:
+    build:
+      context: ../..
+      dockerfile: api-service/Dockerfile
+    ports:
+      - "8080"
+    environment:
+      PORT: "8080"
+      DEBUG: "false"
+      JWT_SECRET: e2e-test-secret
+      FILE_SERVICE_URL: https://file-service:8443
+      TLS_CERT_FILE: /certs/api-service.pem
+      TLS_KEY_FILE: /certs/api-service-key.pem
+      TLS_CA_CERT_FILE: /certs/ca.pem
+    volumes:
+      - ../../certs:/certs:ro
+    depends_on:
+      file-service:
+        condition: service_healthy
