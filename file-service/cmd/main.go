@@ -23,6 +23,12 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	var (
 		debug         bool
 		healthPort    int
@@ -51,7 +57,7 @@ func main() {
 	cfg, err := awsc.LoadDefaultConfig(ctx)
 	if err != nil {
 		log.Error("failed to load AWS config", "err", err)
-		os.Exit(1)
+		return err
 	}
 	s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
 		if s3Endpoint != "" {
@@ -68,7 +74,7 @@ func main() {
 	tlsCfg, err := tls.NewServerConfig(tlsCertFile, tlsKeyFile, tlsCACertFile)
 	if err != nil {
 		log.Error("failed to build TLS config", "err", err)
-		os.Exit(1)
+		return err
 	}
 
 	healthAddr := ":" + strconv.Itoa(healthPort)
@@ -86,11 +92,13 @@ func main() {
 		ReadHeaderTimeout: time.Second * 60,
 	}
 
-	errc := make(chan error)
+	errc := make(chan error, 3)
 	go func() {
 		c := make(chan os.Signal, 1)
 		signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
-		errc <- fmt.Errorf("%s", <-c)
+		sig := <-c
+		log.Info("shutdown signal received", "signal", sig.String())
+		errc <- nil
 	}()
 
 	go func() {
@@ -123,11 +131,15 @@ func main() {
 
 	// waiting on some signal to shutdown the application
 	err = <-errc
-	log.Info("application exiting", "reason", err)
+	if err != nil {
+		log.Error("server stopped unexpectedly", "err", err)
+	}
+	log.Info("application exiting")
 
 	// trigger shutdown goroutine process
 	cancel()
 	wg.Wait()
+	return err
 }
 
 func isPlainHTTP(endpoint string) bool {
