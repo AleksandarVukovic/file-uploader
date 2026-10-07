@@ -1,0 +1,83 @@
+// Code generated with goa, DO NOT EDIT.
+//
+// users protocol buffer definition
+//
+// Command:
+// $ goa gen github.com/aleksandarv/file-uploader/user-service/design -o
+// /Users/aleksandarvukovic/projects/file-uploader/user-service
+
+syntax = "proto3";
+
+package users;
+
+option go_package = "/userspb";
+
+// Service manages user-related operations.
+service Users {
+	// Retrieves a user by their username.
+	rpc GetByUsername (GetByUsernameRequest) returns (GetByUsernameResponse);
+	// Creates a new user.
+	rpc Create (CreateRequest) returns (CreateResponse);
+	// Verifies a username/password pair and returns the matching user.
+	rpc Authenticate (AuthenticateRequest) returns (AuthenticateResponse);
+}
+
+message GetByUsernameRequest {
+	// The username of the user to retrieve
+	optional string username = 1;
+}
+
+message GetByUsernameResponse {
+	// Unique identifier of the user
+	optional sint64 id = 1;
+	// The username of the user
+	optional string username = 2;
+	// The email address of the user
+	optional string email = 3;
+	// The timestamp when the user was created
+	optional string created_at = 4;
+	// The timestamp when the user was last updated
+	optional string updated_at = 5;
+}
+
+message CreateRequest {
+	// The username of the new user
+	optional string username = 1;
+	// The email address of the new user
+	optional string email = 2;
+	// The plaintext password; hashed by the service before storage
+	optional string password = 3;
+}
+
+message CreateResponse {
+	// Unique identifier of the user
+	optional sint64 id = 1;
+	// The username of the user
+	optional string username = 2;
+	// The email address of the user
+	optional string email = 3;
+	// The timestamp when the user was created
+	optional string created_at = 4;
+	// The timestamp when the user was last updated
+	optional string updated_at = 5;
+}
+
+message AuthenticateRequest {
+	// The username to authenticate
+	optional string username = 1;
+	// The plaintext password to verify
+	optional string password = 2;
+}
+
+message AuthenticateResponse {
+	// Unique identifier of the user
+	optional sint64 id = 1;
+	// The username of the user
+	optional string username = 2;
+	// The email address of the user
+	optional string email = 3;
+	// The timestamp when the user was created
+	optional string created_at = 4;
+	// The timestamp when the user was last updated
+	optional string updated_at = 5;
+}
