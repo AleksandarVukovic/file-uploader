@@ -14,6 +14,7 @@ COPY ./api-service/gen ./app/api-service/gen
 COPY ./api-service/Makefile ./app/api-service/Makefile
 # add generated client code of downstream services
 COPY ./file-service/gen ./app/file-service/gen
+COPY ./user-service/gen ./app/user-service/gen
 # copy only what we need from root folder
 COPY ./common ./app/common
 COPY ./common.mk ./app/common.mk

@@ -10,17 +10,25 @@ import (
 	"testing"
 
 	authsvr "github.com/aleksandarv/file-uploader/api-service/gen/http/auth/server"
+	"github.com/aleksandarv/file-uploader/api-service/internal/userservice"
 	"github.com/aleksandarv/file-uploader/common/logger"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
 var loginPath = authsvr.LoginAuthPath()
 
-func newAuthServer(t *testing.T) *httptest.Server {
+func newAuthServer(t *testing.T, users *mockAuthenticator) *httptest.Server {
 	t.Helper()
 
-	handler := Routes(logger.NewLogger(false), testJWTSecret, panicFilesService{}, NewHealthSvc(), NewAuthSvc(testJWTSecret))
+	handler := Routes(logger.NewLogger(false), testJWTSecret, panicFilesService{}, NewHealthSvc(), NewAuthSvc(testJWTSecret, users))
 	return httptest.NewServer(handler)
+}
+
+func authenticatingAs(username, password string, user userservice.User, err error) *mockAuthenticator {
+	users := &mockAuthenticator{}
+	users.On("Authenticate", mock.Anything, username, password).Return(user, err)
+	return users
 }
 
 func newLoginRequest(t *testing.T, baseURL, username, password string) *http.Request {
@@ -41,10 +49,11 @@ func newLoginRequest(t *testing.T, baseURL, username, password string) *http.Req
 func TestLoginEndpoint_Success(t *testing.T) {
 	t.Parallel()
 
-	srv := newAuthServer(t)
+	users := authenticatingAs(testUsername, testPassword, userservice.User{ID: 1, Username: testUsername}, nil)
+	srv := newAuthServer(t, users)
 	defer srv.Close()
 
-	req := newLoginRequest(t, srv.URL, hardcodedUsername, hardcodedPassword)
+	req := newLoginRequest(t, srv.URL, testUsername, testPassword)
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
@@ -56,6 +65,7 @@ func TestLoginEndpoint_Success(t *testing.T) {
 	}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 	require.NotEmpty(t, body.Token)
+	users.AssertExpectations(t)
 }
 
 func TestLoginEndpoint_InvalidCredentials(t *testing.T) {
@@ -66,15 +76,16 @@ func TestLoginEndpoint_InvalidCredentials(t *testing.T) {
 		username string
 		password string
 	}{
-		{"wrong username", "someone-else", hardcodedPassword},
-		{"wrong password", hardcodedUsername, "wrong-password1"},
+		{"wrong username", "someone-else", testPassword},
+		{"wrong password", testUsername, "wrong-password1"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			srv := newAuthServer(t)
+			users := authenticatingAs(tt.username, tt.password, userservice.User{}, userservice.ErrInvalidCredentials)
+			srv := newAuthServer(t, users)
 			defer srv.Close()
 
 			req := newLoginRequest(t, srv.URL, tt.username, tt.password)
@@ -83,6 +94,7 @@ func TestLoginEndpoint_InvalidCredentials(t *testing.T) {
 			defer resp.Body.Close()
 
 			require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+			users.AssertExpectations(t)
 		})
 	}
 }
@@ -90,25 +102,27 @@ func TestLoginEndpoint_InvalidCredentials(t *testing.T) {
 func TestLoginEndpoint_RejectsPayloadFailingDesignValidation(t *testing.T) {
 	t.Parallel()
 
-	srv := newAuthServer(t)
+	users := &mockAuthenticator{}
+	srv := newAuthServer(t, users)
 	defer srv.Close()
 
-	// password shorter than the design's MinLength(8) constraint
-	req := newLoginRequest(t, srv.URL, hardcodedUsername, "short")
+	req := newLoginRequest(t, srv.URL, testUsername, "short")
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	users.AssertNotCalled(t, "Authenticate", mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestLoginEndpoint_IssuedTokenAuthorizesProtectedFilesEndpoint(t *testing.T) {
 	t.Parallel()
 
-	srv := newAuthServer(t)
+	users := authenticatingAs(testUsername, testPassword, userservice.User{ID: 1, Username: testUsername}, nil)
+	srv := newAuthServer(t, users)
 	defer srv.Close()
 
-	loginResp, err := http.DefaultClient.Do(newLoginRequest(t, srv.URL, hardcodedUsername, hardcodedPassword))
+	loginResp, err := http.DefaultClient.Do(newLoginRequest(t, srv.URL, testUsername, testPassword))
 	require.NoError(t, err)
 	defer loginResp.Body.Close()
 	require.Equal(t, http.StatusOK, loginResp.StatusCode)
@@ -126,8 +140,5 @@ func TestLoginEndpoint_IssuedTokenAuthorizesProtectedFilesEndpoint(t *testing.T)
 	require.NoError(t, err)
 	defer uploadResp.Body.Close()
 
-	// panicFilesService panics on Upload; reaching the panic (500, recovered
-	// by PanicHandler) rather than a 401 proves the issued token cleared the
-	// JWT middleware.
 	require.Equal(t, http.StatusInternalServerError, uploadResp.StatusCode)
 }

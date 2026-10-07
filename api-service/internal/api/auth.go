@@ -2,44 +2,49 @@ package api
 
 import (
 	"context"
-	"crypto/subtle"
 	"errors"
 	"time"
 
 	"github.com/aleksandarv/file-uploader/api-service/gen/auth"
+	"github.com/aleksandarv/file-uploader/api-service/internal/userservice"
 	"github.com/aleksandarv/file-uploader/common/logger"
 	"github.com/golang-jwt/jwt/v5"
 )
 
 const tokenTTL = 15 * time.Minute
 
-// TODO: replace with a call to user-service once it owns credential storage.
-const (
-	hardcodedUsername = "admin123"
-	hardcodedPassword = "admin123"
-)
+type authenticator interface {
+	Authenticate(ctx context.Context, username, password string) (userservice.User, error)
+}
 
 type authSvc struct {
 	secret []byte
+	users  authenticator
 }
 
-func NewAuthSvc(secret []byte) auth.Service {
-	return &authSvc{secret: secret}
+func NewAuthSvc(secret []byte, users authenticator) auth.Service {
+	return &authSvc{secret: secret, users: users}
 }
 
 func (s *authSvc) Login(ctx context.Context, p *auth.LoginPayload) (*auth.LoginResult, error) {
 	log := logger.FromCtx(ctx)
 
-	validUsername := subtle.ConstantTimeCompare([]byte(p.Username), []byte(hardcodedUsername)) == 1
-	validPassword := subtle.ConstantTimeCompare([]byte(p.Password), []byte(hardcodedPassword)) == 1
-	if !validUsername || !validPassword {
-		log.Warn("login failed: invalid credentials", "username", p.Username)
-		return nil, auth.MakeInvalidCredentials(errors.New("invalid username or password"))
+	user, err := s.users.Authenticate(ctx, p.Username, p.Password)
+	switch {
+	case errors.Is(err, userservice.ErrInvalidCredentials):
+		log.Error("login failed: invalid credentials", "username", p.Username)
+		return nil, auth.MakeInvalidCredentials(err)
+	case errors.Is(err, userservice.ErrUnavailable):
+		log.Error("login failed: user-service unavailable", "err", err)
+		return nil, auth.MakeUnavailable(errors.New("authentication is temporarily unavailable"))
+	case err != nil:
+		log.Error("login failed: user-service call failed", "err", err)
+		return nil, auth.MakeInternalError(errors.New("failed to authenticate"))
 	}
 
 	now := time.Now()
 	claims := jwt.RegisteredClaims{
-		Subject:   p.Username,
+		Subject:   user.Username,
 		IssuedAt:  jwt.NewNumericDate(now),
 		ExpiresAt: jwt.NewNumericDate(now.Add(tokenTTL)),
 	}
