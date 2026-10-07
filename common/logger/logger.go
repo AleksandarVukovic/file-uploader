@@ -36,13 +36,17 @@ func FromCtx(ctx context.Context) *slog.Logger {
 	panic("logger: context without logger")
 }
 
+func WithRequestID(log *slog.Logger, reqID string) *slog.Logger {
+	return log.With(slog.String("reqID", reqID))
+}
+
 func RequestMiddleware(log *slog.Logger, reqIDMandatory bool) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			rlog := log
 			reqID, ok := r.Context().Value(middleware.RequestIDKey).(string)
 			if ok {
-				rlog = log.With(slog.String("reqID", reqID))
+				rlog = WithRequestID(log, reqID)
 			} else if reqIDMandatory {
 				panic("logger: context without request ID")
 			}

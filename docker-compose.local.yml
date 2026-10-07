@@ -31,6 +31,7 @@ services:
       DEBUG: ${DEBUG:-false}
       JWT_SECRET: ${JWT_SECRET:?}
       FILE_SERVICE_URL: https://file-service:8443
+      USER_SERVICE_ADDR: user-service:8443
       TLS_CERT_FILE: /certs/api-service.pem
       TLS_KEY_FILE: /certs/api-service-key.pem
       TLS_CA_CERT_FILE: /certs/ca.pem
@@ -39,3 +40,75 @@ services:
     depends_on:
       file-service:
         condition: service_healthy
+      user-service:
+        condition: service_healthy
+
+  user-db:
+    image: postgres:17-alpine
+    command:
+      - sh
+      - -c
+      - >-
+        cp /certs/user-db.pem /var/lib/postgresql/server.crt &&
+        cp /certs/user-db-key.pem /var/lib/postgresql/server.key &&
+        chown postgres:postgres /var/lib/postgresql/server.crt /var/lib/postgresql/server.key &&
+        chmod 600 /var/lib/postgresql/server.key &&
+        exec docker-entrypoint.sh postgres
+        -c ssl=on
+        -c ssl_cert_file=/var/lib/postgresql/server.crt
+        -c ssl_key_file=/var/lib/postgresql/server.key
+        -c hba_file=/etc/postgresql/pg_hba.conf
+    environment:
+      POSTGRES_USER: ${USER_DB_USER:-user_service}
+      POSTGRES_PASSWORD: ${USER_DB_PASSWORD:-user_service}
+      POSTGRES_DB: ${USER_DB_NAME:-users}
+    volumes:
+      - user-db-data:/var/lib/postgresql/data
+      - ./certs:/certs:ro
+      - ./user-service/db/pg_hba.local.conf:/etc/postgresql/pg_hba.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  user-db-migrate:
+    image: golang:1.26.8
+    command:
+      - go
+      - run
+      - github.com/pressly/goose/v3/cmd/goose@v3.27.2
+      - -dir
+      - /migrations
+      - postgres
+      - postgres://${USER_DB_USER:-user_service}:${USER_DB_PASSWORD:-user_service}@user-db:5432/${USER_DB_NAME:-users}?sslmode=verify-full&sslrootcert=/certs/ca.pem
+      - up
+    volumes:
+      - ./user-service/db/migrations:/migrations:ro
+      - ./certs:/certs:ro
+    depends_on:
+      user-db:
+        condition: service_healthy
+
+  user-service:
+    build:
+      context: .
+      dockerfile: user-service/Dockerfile
+    ports:
+      - "8082:8080"
+    environment:
+      HEALTH_PORT: "8080"
+      GRPC_PORT: "8443"
+      DEBUG: ${DEBUG:-false}
+      DATABASE_URL: postgres://${USER_DB_USER:-user_service}:${USER_DB_PASSWORD:-user_service}@user-db:5432/${USER_DB_NAME:-users}?sslmode=verify-full&sslrootcert=/certs/ca.pem
+      TLS_CERT_FILE: /certs/user-service.pem
+      TLS_KEY_FILE: /certs/user-service-key.pem
+      TLS_CA_CERT_FILE: /certs/ca.pem
+    volumes:
+      - ./certs:/certs:ro
+    depends_on:
+      user-db-migrate:
+        condition: service_completed_successfully
+
+volumes:
+  user-db-data:
