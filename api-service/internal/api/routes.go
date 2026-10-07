@@ -22,8 +22,12 @@ func Routes(log *slog.Logger, jwtSecret []byte, filesSvc files.Service, healthSv
 
 	authSrv := authsvr.New(auth.NewEndpoints(authSvc), mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
 	authSrv.Use(httpmiddleware.PanicHandler())
-	authSrv.Use(logger.RequestMiddleware(log, false))
+	authSrv.Use(logger.RequestMiddleware(log, true))
 	authSrv.Use(middleware.PopulateRequestContext())
+	authSrv.Use(middleware.RequestID(
+		middleware.UseXRequestIDHeaderOption(true),
+		middleware.XRequestHeaderLimitOption(64),
+	))
 	authSrv.Mount(mux)
 	for _, m := range authSrv.Mounts {
 		log.Debug("expose auth API", "verb", m.Verb, "path", m.Pattern, "method", m.Method)
