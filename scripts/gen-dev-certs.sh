@@ -20,6 +20,13 @@ openssl x509 -req -in file-service.csr -CA ca.pem -CAkey ca-key.pem -CAcreateser
   -out file-service.pem -days "$DAYS" -sha256 \
   -extfile <(printf "subjectAltName=DNS:file-service,DNS:localhost\nextendedKeyUsage=serverAuth")
 
+echo "Generating user-service server certificate..."
+openssl genrsa -out user-service-key.pem 2048
+openssl req -new -key user-service-key.pem -subj "/CN=user-service" -out user-service.csr
+openssl x509 -req -in user-service.csr -CA ca.pem -CAkey ca-key.pem -CAcreateserial \
+  -out user-service.pem -days "$DAYS" -sha256 \
+  -extfile <(printf "subjectAltName=DNS:user-service,DNS:localhost\nextendedKeyUsage=serverAuth")
+
 echo "Generating api-service client certificate..."
 openssl genrsa -out api-service-key.pem 2048
 openssl req -new -key api-service-key.pem -subj "/CN=api-service" -out api-service.csr
@@ -27,7 +34,7 @@ openssl x509 -req -in api-service.csr -CA ca.pem -CAkey ca-key.pem -CAcreateseri
   -out api-service.pem -days "$DAYS" -sha256 \
   -extfile <(printf "extendedKeyUsage=clientAuth")
 
-rm -f file-service.csr api-service.csr ca.srl
-chmod 644 ca.pem file-service.pem file-service-key.pem api-service.pem api-service-key.pem
+rm -f file-service.csr user-service.csr api-service.csr ca.srl
+chmod 644 ca.pem file-service.pem file-service-key.pem user-service.pem user-service-key.pem api-service.pem api-service-key.pem
 
 echo "Done. Certs written to $CERTS_DIR"
