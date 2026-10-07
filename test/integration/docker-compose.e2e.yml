@@ -12,6 +12,72 @@ services:
       retries: 10
       start_period: 5s
 
+  user-db:
+    image: postgres:17-alpine
+    command:
+      - sh
+      - -c
+      - >-
+        cp /certs/user-db.pem /var/lib/postgresql/server.crt &&
+        cp /certs/user-db-key.pem /var/lib/postgresql/server.key &&
+        chown postgres:postgres /var/lib/postgresql/server.crt /var/lib/postgresql/server.key &&
+        chmod 600 /var/lib/postgresql/server.key &&
+        exec docker-entrypoint.sh postgres
+        -c ssl=on
+        -c ssl_cert_file=/var/lib/postgresql/server.crt
+        -c ssl_key_file=/var/lib/postgresql/server.key
+        -c hba_file=/etc/postgresql/pg_hba.conf
+    environment:
+      POSTGRES_USER: e2e_user_service
+      POSTGRES_PASSWORD: e2e_user_service
+      POSTGRES_DB: users
+    volumes:
+      - ../../certs:/certs:ro
+      - ../../user-service/db/pg_hba.local.conf:/etc/postgresql/pg_hba.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  user-db-migrate:
+    image: golang:1.26.8
+    command:
+      - go
+      - run
+      - github.com/pressly/goose/v3/cmd/goose@v3.27.2
+      - -dir
+      - /migrations
+      - postgres
+      - postgres://e2e_user_service:e2e_user_service@user-db:5432/users?sslmode=verify-full&sslrootcert=/certs/ca.pem
+      - up
+    volumes:
+      - ../../user-service/db/migrations:/migrations:ro
+      - ../../certs:/certs:ro
+    depends_on:
+      user-db:
+        condition: service_healthy
+
+  user-service:
+    build:
+      context: ../..
+      dockerfile: user-service/Dockerfile
+    ports:
+      - "8080"
+    environment:
+      HEALTH_PORT: "8080"
+      GRPC_PORT: "8443"
+      DEBUG: "false"
+      DATABASE_URL: postgres://e2e_user_service:e2e_user_service@user-db:5432/users?sslmode=verify-full&sslrootcert=/certs/ca.pem
+      TLS_CERT_FILE: /certs/user-service.pem
+      TLS_KEY_FILE: /certs/user-service-key.pem
+      TLS_CA_CERT_FILE: /certs/ca.pem
+    volumes:
+      - ../../certs:/certs:ro
+    depends_on:
+      user-db-migrate:
+        condition: service_completed_successfully
+
   file-service:
     build:
       context: ../..
@@ -47,6 +113,7 @@ services:
       DEBUG: "false"
       JWT_SECRET: e2e-test-secret
       FILE_SERVICE_URL: https://file-service:8443
+      USER_SERVICE_ADDR: user-service:8443
       TLS_CERT_FILE: /certs/api-service.pem
       TLS_KEY_FILE: /certs/api-service-key.pem
       TLS_CA_CERT_FILE: /certs/ca.pem
@@ -54,4 +121,6 @@ services:
       - ../../certs:/certs:ro
     depends_on:
       file-service:
+        condition: service_healthy
+      user-service:
         condition: service_healthy

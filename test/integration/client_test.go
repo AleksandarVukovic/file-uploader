@@ -18,8 +18,9 @@ import (
 )
 
 var (
-	loginPath  = authsvr.LoginAuthPath()
-	uploadPath = filessvr.UploadFilesPath()
+	loginPath    = authsvr.LoginAuthPath()
+	registerPath = authsvr.RegisterAuthPath()
+	uploadPath   = filessvr.UploadFilesPath()
 )
 
 func checksumOf(body string) string {
@@ -39,6 +40,19 @@ func login(username, password string) (*http.Response, error) {
 		return nil, err
 	}
 	req, err := http.NewRequest(http.MethodPost, apiBaseURL+loginPath, strings.NewReader(string(payload)))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	return http.DefaultClient.Do(req)
+}
+
+func register(username, email, password string) (*http.Response, error) {
+	payload, err := json.Marshal(map[string]string{"username": username, "email": email, "password": password})
+	if err != nil {
+		return nil, err
+	}
+	req, err := http.NewRequest(http.MethodPost, apiBaseURL+registerPath, strings.NewReader(string(payload)))
 	if err != nil {
 		return nil, err
 	}

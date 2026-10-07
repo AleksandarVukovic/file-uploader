@@ -5,6 +5,7 @@ package integration
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -19,8 +20,9 @@ import (
 )
 
 const (
-	e2eUsername  = "admin123"
-	e2ePassword  = "admin123"
+	e2eUsername  = "e2e_user"
+	e2eEmail     = "e2e.user@example.com"
+	e2ePassword  = "E2e-Password-1"
 	e2eJWTSecret = "e2e-test-secret"
 	e2eS3Bucket  = "e2e-test-bucket"
 	e2eAWSRegion = "us-east-1"
@@ -38,7 +40,13 @@ func TestE2E(t *testing.T) {
 }
 
 var _ = BeforeSuite(func() {
-	for _, name := range []string{"api-service.pem", "api-service-key.pem", "file-service.pem", "file-service-key.pem", "ca.pem"} {
+	for _, name := range []string{
+		"api-service.pem", "api-service-key.pem",
+		"file-service.pem", "file-service-key.pem",
+		"user-service.pem", "user-service-key.pem",
+		"user-db.pem", "user-db-key.pem",
+		"ca.pem",
+	} {
 		_, err := os.Stat(filepath.Join("..", "..", "certs", name))
 		Expect(err).NotTo(HaveOccurred(), fmt.Sprintf("dev cert %q not found — run `make certs` from the repo root first", name))
 	}
@@ -52,6 +60,7 @@ var _ = BeforeSuite(func() {
 	composeStack.
 		WaitForService("localstack", wait.ForHealthCheck()).
 		WaitForService("file-service", wait.ForHealthCheck()).
+		WaitForService("user-service", wait.ForHealthCheck()).
 		WaitForService("api-service", wait.ForHealthCheck())
 
 	Expect(composeStack.Up(ctx, tccompose.Wait(true))).To(Succeed())
@@ -87,6 +96,11 @@ var _ = BeforeSuite(func() {
 
 	_, err = s3Client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: aws.String(e2eS3Bucket)})
 	Expect(err).NotTo(HaveOccurred())
+
+	resp, err := register(e2eUsername, e2eEmail, e2ePassword)
+	Expect(err).NotTo(HaveOccurred())
+	defer resp.Body.Close()
+	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
 })
 
 var _ = AfterSuite(func() {
