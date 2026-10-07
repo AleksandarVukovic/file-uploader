@@ -65,10 +65,10 @@ func (s *authSvc) Register(ctx context.Context, p *auth.RegisterPayload) (*auth.
 	user, err := s.users.Create(ctx, p.Username, p.Email, p.Password)
 	switch {
 	case errors.Is(err, userservice.ErrInvalidInput):
-		log.Warn("registration rejected", "username", p.Username, "err", err)
+		log.Error("registration rejected", "username", p.Username, "err", err)
 		return nil, auth.MakeInvalidInput(err)
 	case errors.Is(err, userservice.ErrUserExists):
-		log.Warn("registration rejected: user exists", "username", p.Username)
+		log.Error("registration rejected: user exists", "username", p.Username)
 		return nil, auth.MakeUserExists(err)
 	case errors.Is(err, userservice.ErrUnavailable):
 		log.Error("registration failed: user-service unavailable", "err", err)
