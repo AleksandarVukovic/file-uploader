@@ -8,16 +8,17 @@ FROM golang:1.26.8 AS builder
 WORKDIR /app
 
 # copy only what we need from user-service to our app folder
-COPY ./user-service/cmd ./app/cmd
-COPY ./user-service/internal ./app/internal
-COPY ./user-service/Makefile ./app/
+COPY ./user-service/cmd ./app/user-service/cmd
+COPY ./user-service/internal ./app/user-service/internal
+COPY ./user-service/gen ./app/user-service/gen
+COPY ./user-service/Makefile ./app/user-service/Makefile
 # copy only what we need from root folder
-COPY ./common ./common
-COPY ./common.mk ./common.mk
+COPY ./common ./app/common
+COPY ./common.mk ./app/common.mk
 COPY ./go.mod ./go.sum ./app/
 
 # build app by running make command from root folder
-RUN CGO_ENABLED=0 GOOS=linux make -C app build PROJECT_NAME=user-service
+RUN CGO_ENABLED=0 GOOS=linux make -C app/user-service build PROJECT_NAME=user-service
 
 # final stage
 FROM alpine:3.24.2
@@ -28,9 +29,12 @@ WORKDIR /home/appuser
 
 COPY --from=builder --chown=appuser:appgroup /user-service/bin/user-service ./user-service
 
-ENV PORT=8080
+ENV HEALTH_PORT=8080
 
-EXPOSE $PORT
+EXPOSE $HEALTH_PORT
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+CMD wget -q -O /dev/null "http://localhost:$HEALTH_PORT/health" || exit 1
 
 USER appuser
 
