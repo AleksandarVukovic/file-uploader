@@ -8,11 +8,12 @@ ifndef SERVICE_NAME
 @$(error SERVICE_NAME is not set — define it in the service's Makefile before including common.mk)
 endif
 
+SERVICE_DIR := $(PROJECT_ROOT)/$(SERVICE_NAME)
 
 DOCKER_REPO ?= vukovic96/$(PROJECT_NAME)-$(SERVICE_NAME)
 DOCKER_IMAGE_TAG ?= latest
 
-BIN_DIR ?= $(PROJECT_ROOT)/$(SERVICE_NAME)/bin
+BIN_DIR ?= $(SERVICE_DIR)/bin
 COVERAGE_THRESHOLD ?= 70.0
 
 TEST_EXCLUDE ?= /(gen|design|cmd|test)(/|$$)
@@ -23,7 +24,7 @@ INTEGRATION_TEST_TIMEOUT ?= 60s
 GOA_VERSION := v3.32.0
 GOA_CMD := goa.design/goa/v3/cmd/goa
 GOA_DESIGN_PKG ?= $(GO_MODULE_NAME)/$(SERVICE_NAME)/design
-GOA_GEN_OUTPUT ?= $(PROJECT_ROOT)/$(SERVICE_NAME)
+GOA_GEN_OUTPUT ?= $(SERVICE_DIR)
 
 .PHONY: all build test gotest test-integration gotest-integration fmt vet goenv coverage clean docker-build docker-push goa-install generate
 
