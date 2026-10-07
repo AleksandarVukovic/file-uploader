@@ -148,7 +148,7 @@ ctx := logger.WithCtx(ctx, log)
 logger.FromCtx(ctx).Info("server started", "port", port)
 ```
 
-`FromCtx` panics if the context has no logger, so attach one early (e.g. in `main` or in middleware). `logger.RequestMiddleware(log, mandatory bool)` always attaches a per-request logger to the context — tagged with the request ID once one has been populated on the context, without that tag otherwise. If `mandatory` is `true` and no request ID is present by the time this middleware runs, it panics instead of silently logging without one, so a route wired with `mandatory=true` must have a request-ID-populating middleware (goa's `RequestID` or `RequireRequestID`, see below) ahead of it in the chain.
+`FromCtx` panics if the context has no logger, so attach one early (e.g. in `main` or in middleware). `middleware.Logger(log, mandatory bool)` (`common/http/middleware`) always attaches a per-request logger to the context — tagged with the request ID once one has been populated on the context, without that tag otherwise. If `mandatory` is `true` and no request ID is present by the time this middleware runs, it panics instead of silently logging without one, so a route wired with `mandatory=true` must have a request-ID-populating middleware (goa's `RequestID` or `RequireRequestID`, see below) ahead of it in the chain.
 
 ## Request IDs
 
@@ -162,9 +162,9 @@ The gRPC hop to `user-service` carries the ID as `x-request-id` metadata (gRPC m
 
 - `ClientRequestID()` — a client interceptor on `api-service`'s connection that copies the ID from the context into outgoing metadata.
 - `RequestID(required)` — a server interceptor that reads the metadata value into the context, rejecting calls without it as `InvalidArgument` when `required` is true (the counterpart of `RequireRequestID()`).
-- `Logger(log, mandatory)` — a server interceptor that tags the request-scoped logger with `reqID` from the context (the counterpart of `logger.RequestMiddleware`; it panics if `mandatory` is true and no ID is present, so `RequestID` must come first in the chain).
+- `Logger(log, mandatory)` — a server interceptor that tags the request-scoped logger with `reqID` from the context (the counterpart of `middleware.Logger`; it panics if `mandatory` is true and no ID is present, so `RequestID` must come first in the chain).
 - `Recover(log)` — turns a panic in a gRPC handler into an `Internal` status and logs it.
 
-`/login` therefore runs goa's `RequestID` middleware (and `RequestMiddleware(log, true)`), since it has to forward an ID to `user-service`.
+`/login` therefore runs goa's `RequestID` middleware (and `Logger(log, true)`), since it has to forward an ID to `user-service`.
 
-Each service's `internal/api/routes.go` wires these per endpoint via an exported `Routes(...) http.Handler` (signature varies per service — e.g. `api-service`'s takes the JWT secret and all three of its services) — the same function `cmd/main.go` and tests both call, so tests exercise the real middleware chain instead of a re-implementation of it. Endpoint types are wired differently: endpoints meant to be hit directly by a client (`files`, `login`) treat a request ID as mandatory (`RequestMiddleware(log, true)`, paired with `RequireRequestID()` or a generating `RequestID` middleware), while `/health` does not (`RequestMiddleware(log, false)`), since external health probes (e.g. a kubelet liveness check) won't send one.
+Each service's `internal/api/routes.go` wires these per endpoint via an exported `Routes(...) http.Handler` (signature varies per service — e.g. `api-service`'s takes the JWT secret and all three of its services) — the same function `cmd/main.go` and tests both call, so tests exercise the real middleware chain instead of a re-implementation of it. Endpoint types are wired differently: endpoints meant to be hit directly by a client (`files`, `login`) treat a request ID as mandatory (`Logger(log, true)`, paired with `RequireRequestID()` or a generating `RequestID` middleware), while `/health` does not (`Logger(log, false)`), since external health probes (e.g. a kubelet liveness check) won't send one.
