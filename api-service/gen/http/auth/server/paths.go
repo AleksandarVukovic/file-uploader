@@ -12,3 +12,8 @@ package server
 func LoginAuthPath() string {
 	return "/login"
 }
+
+// RegisterAuthPath returns the URL path to the auth service register HTTP endpoint.
+func RegisterAuthPath() string {
+	return "/register"
+}

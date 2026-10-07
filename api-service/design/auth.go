@@ -42,4 +42,55 @@ var _ = Service("auth", func() {
 			Response("internal_error", StatusInternalServerError)
 		})
 	})
+
+	Method("register", func() {
+		Description("Creates a new user account.")
+
+		Payload(func() {
+			Attribute("username", String, "Username of the new user", func() {
+				MinLength(3)
+				MaxLength(50)
+				Pattern(`^[a-z][a-z0-9_]*$`)
+				Example("john_doe")
+			})
+			Attribute("email", String, "Email address of the new user", func() {
+				Format(FormatEmail)
+				Example("john.doe@example.com")
+			})
+			Attribute("password", String, "Password of the new user", func() {
+				MinLength(8)
+				MaxLength(72)
+				Pattern(`^[\x21-\x7E]+$`)
+				Example("Correct-Horse-42")
+			})
+			Required("username", "email", "password")
+		})
+
+		Result(func() {
+			Attribute("id", Int64, "Unique identifier of the new user", func() {
+				Example(123)
+			})
+			Attribute("username", String, "Username of the new user", func() {
+				Example("john_doe")
+			})
+			Attribute("email", String, "Email address of the new user", func() {
+				Example("john.doe@example.com")
+			})
+			Required("id", "username", "email")
+		})
+
+		Error("invalid_input", ErrorResult, "The user data was rejected.")
+		Error("user_exists", ErrorResult, "Username or email is already taken.")
+		Error("unavailable", ErrorResult, "Service unavailable.")
+		Error("internal_error", ErrorResult, "Fault in the service.")
+
+		HTTP(func() {
+			POST("/register")
+			Response(StatusCreated)
+			Response("invalid_input", StatusBadRequest)
+			Response("user_exists", StatusConflict)
+			Response("unavailable", StatusServiceUnavailable)
+			Response("internal_error", StatusInternalServerError)
+		})
+	})
 })

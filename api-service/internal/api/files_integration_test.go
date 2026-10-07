@@ -45,7 +45,7 @@ func newAPIServer(t *testing.T, fileService *httptest.Server) *httptest.Server {
 
 	fsClient := fileservice.NewClient(fsURL.Scheme, fsURL.Host, false, client.NewDoer(false, tlsCfg))
 	filesSvc := NewFilesSvc(fsClient)
-	handler := Routes(logger.NewLogger(false), testJWTSecret, filesSvc, NewHealthSvc(), NewAuthSvc(testJWTSecret, &mockAuthenticator{}))
+	handler := Routes(logger.NewLogger(false), testJWTSecret, filesSvc, NewHealthSvc(), NewAuthSvc(testJWTSecret, &mockUserService{}))
 
 	return httptest.NewServer(handler)
 }

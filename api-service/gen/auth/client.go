@@ -16,13 +16,15 @@ import (
 
 // Client is the "auth" service client.
 type Client struct {
-	LoginEndpoint goa.Endpoint
+	LoginEndpoint    goa.Endpoint
+	RegisterEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "auth" service client given the endpoints.
-func NewClient(login goa.Endpoint) *Client {
+func NewClient(login, register goa.Endpoint) *Client {
 	return &Client{
-		LoginEndpoint: login,
+		LoginEndpoint:    login,
+		RegisterEndpoint: register,
 	}
 }
 
@@ -39,4 +41,20 @@ func (c *Client) Login(ctx context.Context, p *LoginPayload) (res *LoginResult, 
 		return
 	}
 	return ires.(*LoginResult), nil
+}
+
+// Register calls the "register" endpoint of the "auth" service.
+// Register may return the following errors:
+//   - "invalid_input" (type *goa.ServiceError): The user data was rejected.
+//   - "user_exists" (type *goa.ServiceError): Username or email is already taken.
+//   - "unavailable" (type *goa.ServiceError): Service unavailable.
+//   - "internal_error" (type *goa.ServiceError): Fault in the service.
+//   - error: internal error
+func (c *Client) Register(ctx context.Context, p *RegisterPayload) (res *RegisterResult, err error) {
+	var ires any
+	ires, err = c.RegisterEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*RegisterResult), nil
 }

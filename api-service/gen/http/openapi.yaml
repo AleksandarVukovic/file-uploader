@@ -182,6 +182,82 @@ paths:
                             timeout: false
             schemes:
                 - http
+    /register:
+        post:
+            tags:
+                - auth
+            summary: register auth
+            description: Creates a new user account.
+            operationId: auth#register
+            parameters:
+                - name: RegisterRequestBody
+                  in: body
+                  required: true
+                  schema:
+                    $ref: '#/definitions/AuthRegisterRequestBody'
+                    required:
+                        - username
+                        - email
+                        - password
+            responses:
+                "201":
+                    description: Created response.
+                    schema:
+                        $ref: '#/definitions/AuthRegisterResponseBody'
+                        required:
+                            - id
+                            - username
+                            - email
+                "400":
+                    description: 'invalid_input: The user data was rejected.'
+                    schema:
+                        $ref: '#/definitions/AuthRegisterInvalidInputResponseBody'
+                    examples:
+                        application/vnd.goa.error:
+                            fault: false
+                            id: 123abc
+                            message: parameter 'p' must be an integer
+                            name: invalid_input
+                            temporary: false
+                            timeout: false
+                "409":
+                    description: 'user_exists: Username or email is already taken.'
+                    schema:
+                        $ref: '#/definitions/AuthRegisterUserExistsResponseBody'
+                    examples:
+                        application/vnd.goa.error:
+                            fault: false
+                            id: 123abc
+                            message: parameter 'p' must be an integer
+                            name: user_exists
+                            temporary: false
+                            timeout: false
+                "500":
+                    description: 'internal_error: Fault in the service.'
+                    schema:
+                        $ref: '#/definitions/AuthRegisterInternalErrorResponseBody'
+                    examples:
+                        application/vnd.goa.error:
+                            fault: false
+                            id: 123abc
+                            message: parameter 'p' must be an integer
+                            name: internal_error
+                            temporary: false
+                            timeout: false
+                "503":
+                    description: 'unavailable: Service unavailable.'
+                    schema:
+                        $ref: '#/definitions/AuthRegisterUnavailableResponseBody'
+                    examples:
+                        application/vnd.goa.error:
+                            fault: false
+                            id: 123abc
+                            message: parameter 'p' must be an integer
+                            name: unavailable
+                            temporary: false
+                            timeout: false
+            schemes:
+                - http
 definitions:
     AuthLoginInternalErrorResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
@@ -339,6 +415,234 @@ definitions:
             message: parameter 'p' must be an integer
             name: bad_request
             temporary: true
+            timeout: true
+        required:
+            - name
+            - id
+            - message
+            - temporary
+            - timeout
+            - fault
+    AuthRegisterInternalErrorResponseBody:
+        title: 'Mediatype identifier: application/vnd.goa.error; view=default'
+        type: object
+        properties:
+            fault:
+                type: boolean
+                description: Is the error a server-side fault?
+                example: false
+            id:
+                type: string
+                description: ID is a unique identifier for this particular occurrence of the problem.
+                example: 123abc
+            message:
+                type: string
+                description: Message is a human-readable explanation specific to this occurrence of the problem.
+                example: parameter 'p' must be an integer
+            name:
+                type: string
+                description: Name is the name of this class of errors.
+                example: bad_request
+            temporary:
+                type: boolean
+                description: Is the error temporary?
+                example: true
+            timeout:
+                type: boolean
+                description: Is the error a timeout?
+                example: false
+        description: Error response result type (default view)
+        example:
+            fault: false
+            id: 123abc
+            message: parameter 'p' must be an integer
+            name: bad_request
+            temporary: true
+            timeout: false
+        required:
+            - name
+            - id
+            - message
+            - temporary
+            - timeout
+            - fault
+    AuthRegisterInvalidInputResponseBody:
+        title: 'Mediatype identifier: application/vnd.goa.error; view=default'
+        type: object
+        properties:
+            fault:
+                type: boolean
+                description: Is the error a server-side fault?
+                example: false
+            id:
+                type: string
+                description: ID is a unique identifier for this particular occurrence of the problem.
+                example: 123abc
+            message:
+                type: string
+                description: Message is a human-readable explanation specific to this occurrence of the problem.
+                example: parameter 'p' must be an integer
+            name:
+                type: string
+                description: Name is the name of this class of errors.
+                example: bad_request
+            temporary:
+                type: boolean
+                description: Is the error temporary?
+                example: true
+            timeout:
+                type: boolean
+                description: Is the error a timeout?
+                example: true
+        description: Error response result type (default view)
+        example:
+            fault: false
+            id: 123abc
+            message: parameter 'p' must be an integer
+            name: bad_request
+            temporary: true
+            timeout: true
+        required:
+            - name
+            - id
+            - message
+            - temporary
+            - timeout
+            - fault
+    AuthRegisterRequestBody:
+        title: AuthRegisterRequestBody
+        type: object
+        properties:
+            email:
+                type: string
+                description: Email address of the new user
+                example: john.doe@example.com
+                format: email
+            password:
+                type: string
+                description: Password of the new user
+                example: Correct-Horse-42
+                pattern: ^[\x21-\x7E]+$
+                minLength: 8
+                maxLength: 72
+            username:
+                type: string
+                description: Username of the new user
+                example: john_doe
+                pattern: ^[a-z][a-z0-9_]*$
+                minLength: 3
+                maxLength: 50
+        example:
+            email: john.doe@example.com
+            password: Correct-Horse-42
+            username: john_doe
+        required:
+            - username
+            - email
+            - password
+    AuthRegisterResponseBody:
+        title: AuthRegisterResponseBody
+        type: object
+        properties:
+            email:
+                type: string
+                description: Email address of the new user
+                example: john.doe@example.com
+            id:
+                type: integer
+                description: Unique identifier of the new user
+                example: 123
+                format: int64
+            username:
+                type: string
+                description: Username of the new user
+                example: john_doe
+        example:
+            email: john.doe@example.com
+            id: 123
+            username: john_doe
+        required:
+            - id
+            - username
+            - email
+    AuthRegisterUnavailableResponseBody:
+        title: 'Mediatype identifier: application/vnd.goa.error; view=default'
+        type: object
+        properties:
+            fault:
+                type: boolean
+                description: Is the error a server-side fault?
+                example: false
+            id:
+                type: string
+                description: ID is a unique identifier for this particular occurrence of the problem.
+                example: 123abc
+            message:
+                type: string
+                description: Message is a human-readable explanation specific to this occurrence of the problem.
+                example: parameter 'p' must be an integer
+            name:
+                type: string
+                description: Name is the name of this class of errors.
+                example: bad_request
+            temporary:
+                type: boolean
+                description: Is the error temporary?
+                example: false
+            timeout:
+                type: boolean
+                description: Is the error a timeout?
+                example: true
+        description: Error response result type (default view)
+        example:
+            fault: false
+            id: 123abc
+            message: parameter 'p' must be an integer
+            name: bad_request
+            temporary: false
+            timeout: true
+        required:
+            - name
+            - id
+            - message
+            - temporary
+            - timeout
+            - fault
+    AuthRegisterUserExistsResponseBody:
+        title: 'Mediatype identifier: application/vnd.goa.error; view=default'
+        type: object
+        properties:
+            fault:
+                type: boolean
+                description: Is the error a server-side fault?
+                example: true
+            id:
+                type: string
+                description: ID is a unique identifier for this particular occurrence of the problem.
+                example: 123abc
+            message:
+                type: string
+                description: Message is a human-readable explanation specific to this occurrence of the problem.
+                example: parameter 'p' must be an integer
+            name:
+                type: string
+                description: Name is the name of this class of errors.
+                example: bad_request
+            temporary:
+                type: boolean
+                description: Is the error temporary?
+                example: false
+            timeout:
+                type: boolean
+                description: Is the error a timeout?
+                example: true
+        description: Error response result type (default view)
+        example:
+            fault: true
+            id: 123abc
+            message: parameter 'p' must be an integer
+            name: bad_request
+            temporary: false
             timeout: true
         required:
             - name

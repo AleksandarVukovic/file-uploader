@@ -18,6 +18,8 @@ import (
 type Service interface {
 	// Authenticates a user and returns a JWT token.
 	Login(context.Context, *LoginPayload) (res *LoginResult, err error)
+	// Creates a new user account.
+	Register(context.Context, *RegisterPayload) (res *RegisterResult, err error)
 }
 
 // APIName is the name of the API as defined in the design.
@@ -34,7 +36,7 @@ const ServiceName = "auth"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [1]string{"login"}
+var MethodNames = [2]string{"login", "register"}
 
 // LoginPayload is the payload type of the auth service login method.
 type LoginPayload struct {
@@ -50,6 +52,26 @@ type LoginResult struct {
 	Token string
 }
 
+// RegisterPayload is the payload type of the auth service register method.
+type RegisterPayload struct {
+	// Username of the new user
+	Username string
+	// Email address of the new user
+	Email string
+	// Password of the new user
+	Password string
+}
+
+// RegisterResult is the result type of the auth service register method.
+type RegisterResult struct {
+	// Unique identifier of the new user
+	ID int64
+	// Username of the new user
+	Username string
+	// Email address of the new user
+	Email string
+}
+
 // MakeInvalidCredentials builds a goa.ServiceError from an error.
 func MakeInvalidCredentials(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "invalid_credentials", false, false, false)
@@ -63,4 +85,14 @@ func MakeUnavailable(err error) *goa.ServiceError {
 // MakeInternalError builds a goa.ServiceError from an error.
 func MakeInternalError(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "internal_error", false, false, false)
+}
+
+// MakeInvalidInput builds a goa.ServiceError from an error.
+func MakeInvalidInput(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "invalid_input", false, false, false)
+}
+
+// MakeUserExists builds a goa.ServiceError from an error.
+func MakeUserExists(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "user_exists", false, false, false)
 }

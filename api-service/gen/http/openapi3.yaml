@@ -197,6 +197,87 @@ paths:
                                 name: unavailable
                                 temporary: false
                                 timeout: false
+    /register:
+        post:
+            tags:
+                - auth
+            summary: register auth
+            description: Creates a new user account.
+            operationId: auth#register
+            requestBody:
+                description: Request body for register.
+                required: true
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RegisterRequestBody'
+                        example:
+                            email: john.doe@example.com
+                            password: Correct-Horse-42
+                            username: john_doe
+            responses:
+                "201":
+                    description: Created response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/RegisterResponseBody'
+                            example:
+                                email: john.doe@example.com
+                                id: 123
+                                username: john_doe
+                "400":
+                    description: 'invalid_input: The user data was rejected.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: invalid_input
+                                temporary: false
+                                timeout: false
+                "409":
+                    description: 'user_exists: Username or email is already taken.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: user_exists
+                                temporary: false
+                                timeout: false
+                "500":
+                    description: 'internal_error: Fault in the service.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: internal_error
+                                temporary: false
+                                timeout: false
+                "503":
+                    description: 'unavailable: Service unavailable.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: unavailable
+                                temporary: false
+                                timeout: false
 components:
     schemas:
         Error:
@@ -286,6 +367,61 @@ components:
                 token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c
             required:
                 - token
+        RegisterRequestBody:
+            type: object
+            properties:
+                email:
+                    type: string
+                    description: Email address of the new user
+                    example: john.doe@example.com
+                    format: email
+                password:
+                    type: string
+                    description: Password of the new user
+                    example: Correct-Horse-42
+                    pattern: ^[\x21-\x7E]+$
+                    minLength: 8
+                    maxLength: 72
+                username:
+                    type: string
+                    description: Username of the new user
+                    example: john_doe
+                    pattern: ^[a-z][a-z0-9_]*$
+                    minLength: 3
+                    maxLength: 50
+            description: Request body for register.
+            example:
+                email: john.doe@example.com
+                password: Correct-Horse-42
+                username: john_doe
+            required:
+                - username
+                - email
+                - password
+        RegisterResponseBody:
+            type: object
+            properties:
+                email:
+                    type: string
+                    description: Email address of the new user
+                    example: john.doe@example.com
+                id:
+                    type: integer
+                    description: Unique identifier of the new user
+                    example: 123
+                    format: int64
+                username:
+                    type: string
+                    description: Username of the new user
+                    example: john_doe
+            example:
+                email: john.doe@example.com
+                id: 123
+                username: john_doe
+            required:
+                - id
+                - username
+                - email
 tags:
     - name: files
       description: Service manages upload of single files.
