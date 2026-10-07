@@ -7,6 +7,7 @@ var _ = API("user-service", func() {
 	Description("Service for handling user-related operations")
 	Server("user-service", func() {
 		Host("localhost", func() {
+			URI("grpcs://localhost:8443")
 			URI("http://localhost:8080")
 		})
 	})
