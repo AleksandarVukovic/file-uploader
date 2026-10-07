@@ -6,7 +6,6 @@ import (
 
 	"github.com/aleksandarv/file-uploader/common/grpc/interceptor"
 	httpmiddleware "github.com/aleksandarv/file-uploader/common/http/middleware"
-	"github.com/aleksandarv/file-uploader/common/logger"
 	"github.com/aleksandarv/file-uploader/user-service/gen/grpc/users/pb"
 	userssvr "github.com/aleksandarv/file-uploader/user-service/gen/grpc/users/server"
 	"github.com/aleksandarv/file-uploader/user-service/gen/health"
@@ -35,7 +34,7 @@ func HealthRoutes(log *slog.Logger, healthSvc health.Service) http.Handler {
 
 	healthSrv := healthsvr.New(health.NewEndpoints(healthSvc), mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
 	healthSrv.Use(httpmiddleware.PanicHandler())
-	healthSrv.Use(logger.RequestMiddleware(log, false))
+	healthSrv.Use(httpmiddleware.Logger(log, false))
 	healthSrv.Mount(mux)
 	for _, m := range healthSrv.Mounts {
 		log.Debug("expose health API", "verb", m.Verb, "path", m.Pattern, "method", m.Method)

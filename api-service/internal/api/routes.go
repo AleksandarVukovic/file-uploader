@@ -12,7 +12,6 @@ import (
 	healthsvr "github.com/aleksandarv/file-uploader/api-service/gen/http/health/server"
 	apimiddleware "github.com/aleksandarv/file-uploader/api-service/internal/middleware"
 	httpmiddleware "github.com/aleksandarv/file-uploader/common/http/middleware"
-	"github.com/aleksandarv/file-uploader/common/logger"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/http/middleware"
 )
@@ -22,7 +21,7 @@ func Routes(log *slog.Logger, jwtSecret []byte, filesSvc files.Service, healthSv
 
 	authSrv := authsvr.New(auth.NewEndpoints(authSvc), mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
 	authSrv.Use(httpmiddleware.PanicHandler())
-	authSrv.Use(logger.RequestMiddleware(log, true))
+	authSrv.Use(httpmiddleware.Logger(log, true))
 	authSrv.Use(middleware.PopulateRequestContext())
 	authSrv.Use(middleware.RequestID(
 		middleware.UseXRequestIDHeaderOption(true),
@@ -36,7 +35,7 @@ func Routes(log *slog.Logger, jwtSecret []byte, filesSvc files.Service, healthSv
 	filesSrv := filessvr.New(files.NewEndpoints(filesSvc), mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
 	filesSrv.Use(apimiddleware.JWT(jwtSecret))
 	filesSrv.Use(httpmiddleware.PanicHandler())
-	filesSrv.Use(logger.RequestMiddleware(log, true))
+	filesSrv.Use(httpmiddleware.Logger(log, true))
 	filesSrv.Use(middleware.PopulateRequestContext())
 	filesSrv.Use(middleware.RequestID(
 		middleware.UseXRequestIDHeaderOption(true),
@@ -49,7 +48,7 @@ func Routes(log *slog.Logger, jwtSecret []byte, filesSvc files.Service, healthSv
 
 	healthSrv := healthsvr.New(health.NewEndpoints(healthSvc), mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
 	healthSrv.Use(httpmiddleware.PanicHandler())
-	healthSrv.Use(logger.RequestMiddleware(log, false))
+	healthSrv.Use(httpmiddleware.Logger(log, false))
 	// healthSrv.Use(middleware.PopulateRequestContext())
 	healthSrv.Mount(mux)
 	for _, m := range healthSrv.Mounts {
