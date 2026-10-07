@@ -13,16 +13,17 @@ import (
 
 const tokenTTL = 15 * time.Minute
 
-type authenticator interface {
+type userService interface {
 	Authenticate(ctx context.Context, username, password string) (userservice.User, error)
+	Create(ctx context.Context, username, email, password string) (userservice.User, error)
 }
 
 type authSvc struct {
 	secret []byte
-	users  authenticator
+	users  userService
 }
 
-func NewAuthSvc(secret []byte, users authenticator) auth.Service {
+func NewAuthSvc(secret []byte, users userService) auth.Service {
 	return &authSvc{secret: secret, users: users}
 }
 
@@ -56,4 +57,27 @@ func (s *authSvc) Login(ctx context.Context, p *auth.LoginPayload) (*auth.LoginR
 
 	log.Info("login succeeded", "username", p.Username)
 	return &auth.LoginResult{Token: signed}, nil
+}
+
+func (s *authSvc) Register(ctx context.Context, p *auth.RegisterPayload) (*auth.RegisterResult, error) {
+	log := logger.FromCtx(ctx)
+
+	user, err := s.users.Create(ctx, p.Username, p.Email, p.Password)
+	switch {
+	case errors.Is(err, userservice.ErrInvalidInput):
+		log.Warn("registration rejected", "username", p.Username, "err", err)
+		return nil, auth.MakeInvalidInput(err)
+	case errors.Is(err, userservice.ErrUserExists):
+		log.Warn("registration rejected: user exists", "username", p.Username)
+		return nil, auth.MakeUserExists(err)
+	case errors.Is(err, userservice.ErrUnavailable):
+		log.Error("registration failed: user-service unavailable", "err", err)
+		return nil, auth.MakeUnavailable(errors.New("registration is temporarily unavailable"))
+	case err != nil:
+		log.Error("registration failed: user-service call failed", "err", err)
+		return nil, auth.MakeInternalError(errors.New("failed to register user"))
+	}
+
+	log.Info("user registered", "username", user.Username, "id", user.ID)
+	return &auth.RegisterResult{ID: user.ID, Username: user.Username, Email: user.Email}, nil
 }

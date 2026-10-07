@@ -26,7 +26,7 @@ import (
 //	command (subcommand1|subcommand2|...)
 func UsageCommands() []string {
 	return []string{
-		"auth login",
+		"auth (login|register)",
 		"files upload",
 		"health health",
 	}
@@ -74,6 +74,9 @@ func ParseEndpoint(
 		authLoginFlags    = flag.NewFlagSet("login", flag.ExitOnError)
 		authLoginBodyFlag = new(cliStringFlag)
 
+		authRegisterFlags    = flag.NewFlagSet("register", flag.ExitOnError)
+		authRegisterBodyFlag = new(cliStringFlag)
+
 		filesFlags = flag.NewFlagSet("files", flag.ContinueOnError)
 
 		filesUploadFlags           = flag.NewFlagSet("upload", flag.ExitOnError)
@@ -88,6 +91,7 @@ func ParseEndpoint(
 		healthHealthFlags = flag.NewFlagSet("health", flag.ExitOnError)
 	)
 	authLoginFlags.Var(authLoginBodyFlag, "body", "")
+	authRegisterFlags.Var(authRegisterBodyFlag, "body", "")
 	filesUploadFlags.Var(filesUploadFilenameFlag, "filename", "")
 	filesUploadFlags.Var(filesUploadSizeFlag, "size", "")
 	filesUploadFlags.Var(filesUploadChecksumFlag, "checksum", "")
@@ -95,6 +99,7 @@ func ParseEndpoint(
 
 	authFlags.Usage = authUsage
 	authLoginFlags.Usage = authLoginUsage
+	authRegisterFlags.Usage = authRegisterUsage
 
 	filesFlags.Usage = filesUsage
 	filesUploadFlags.Usage = filesUploadUsage
@@ -143,6 +148,9 @@ func ParseEndpoint(
 			case "login":
 				epf = authLoginFlags
 
+			case "register":
+				epf = authRegisterFlags
+
 			}
 
 		case "files":
@@ -185,6 +193,9 @@ func ParseEndpoint(
 			case "login":
 				endpoint = c.Login()
 				data, err = authc.BuildLoginPayload(authLoginBodyFlag.value)
+			case "register":
+				endpoint = c.Register()
+				data, err = authc.BuildRegisterPayload(authRegisterBodyFlag.value)
 			}
 		case "files":
 			c := filesc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -221,6 +232,7 @@ func authUsage() {
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] auth COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    login: Authenticates a user and returns a JWT token.`)
+	fmt.Fprintln(os.Stderr, `    register: Creates a new user account.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s auth COMMAND --help\n", os.Args[0])
@@ -241,6 +253,24 @@ func authLoginUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth login --body '{\n      \"password\": \"s3cr3t#s\",\n      \"username\": \"john_doe\"\n   }'")
+}
+
+func authRegisterUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] auth register", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Creates a new user account.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth register --body '{\n      \"email\": \"john.doe@example.com\",\n      \"password\": \"Correct-Horse-42\",\n      \"username\": \"john_doe\"\n   }'")
 }
 
 // filesUsage displays the usage of the files command and its subcommands.

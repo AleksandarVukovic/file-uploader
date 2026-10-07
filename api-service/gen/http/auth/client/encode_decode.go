@@ -146,3 +146,145 @@ func DecodeLoginResponse(decoder func(*http.Response) goahttp.Decoder, restoreBo
 		}
 	}
 }
+
+// BuildRegisterRequest instantiates a HTTP request object with method and path
+// set to call the "auth" service "register" endpoint
+func (c *Client) BuildRegisterRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RegisterAuthPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("auth", "register", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRegisterRequest returns an encoder for requests sent to the auth
+// register server.
+func EncodeRegisterRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*auth.RegisterPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("auth", "register", "*auth.RegisterPayload", v)
+		}
+		body := NewRegisterRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("auth", "register", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRegisterResponse returns a decoder for responses returned by the auth
+// register endpoint. restoreBody controls whether the response body should be
+// restored after having been read.
+// DecodeRegisterResponse may return the following errors:
+//   - "invalid_input" (type *goa.ServiceError): http.StatusBadRequest
+//   - "user_exists" (type *goa.ServiceError): http.StatusConflict
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "internal_error" (type *goa.ServiceError): http.StatusInternalServerError
+//   - error: internal error
+func DecodeRegisterResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (result any, decodeErr error) {
+		responseBody := resp.Body
+		if restoreBody {
+			b, readErr := io.ReadAll(responseBody)
+			closeErr := responseBody.Close()
+			if err := errors.Join(readErr, closeErr); err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "register", err)
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer func() {
+				if err := responseBody.Close(); err != nil {
+					decodeErr = errors.Join(decodeErr, goahttp.ErrDecodingError("auth", "register", err))
+				}
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusCreated:
+			var (
+				body RegisterResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "register", err)
+			}
+			err = ValidateRegisterResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "register", err)
+			}
+			res := NewRegisterResultCreated(&body)
+			return res, nil
+		case http.StatusBadRequest:
+			var (
+				body RegisterInvalidInputResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "register", err)
+			}
+			err = ValidateRegisterInvalidInputResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "register", err)
+			}
+			return nil, NewRegisterInvalidInput(&body)
+		case http.StatusConflict:
+			var (
+				body RegisterUserExistsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "register", err)
+			}
+			err = ValidateRegisterUserExistsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "register", err)
+			}
+			return nil, NewRegisterUserExists(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body RegisterUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "register", err)
+			}
+			err = ValidateRegisterUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "register", err)
+			}
+			return nil, NewRegisterUnavailable(&body)
+		case http.StatusInternalServerError:
+			var (
+				body RegisterInternalErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "register", err)
+			}
+			err = ValidateRegisterInternalErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("auth", "register", err)
+			}
+			return nil, NewRegisterInternalError(&body)
+		default:
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("auth", "register", err)
+			}
+			return nil, goahttp.ErrInvalidResponse("auth", "register", resp.StatusCode, string(body))
+		}
+	}
+}

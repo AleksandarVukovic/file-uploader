@@ -22,11 +22,33 @@ type LoginRequestBody struct {
 	Password string `form:"password" json:"password" xml:"password"`
 }
 
+// RegisterRequestBody is the type of the "auth" service "register" endpoint
+// HTTP request body.
+type RegisterRequestBody struct {
+	// Username of the new user
+	Username string `form:"username" json:"username" xml:"username"`
+	// Email address of the new user
+	Email string `form:"email" json:"email" xml:"email"`
+	// Password of the new user
+	Password string `form:"password" json:"password" xml:"password"`
+}
+
 // LoginResponseBody is the type of the "auth" service "login" endpoint HTTP
 // response body.
 type LoginResponseBody struct {
 	// JWT token for authenticated user
 	Token *string `form:"token,omitempty" json:"token,omitempty" xml:"token,omitempty"`
+}
+
+// RegisterResponseBody is the type of the "auth" service "register" endpoint
+// HTTP response body.
+type RegisterResponseBody struct {
+	// Unique identifier of the new user
+	ID *int64 `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Username of the new user
+	Username *string `form:"username,omitempty" json:"username,omitempty" xml:"username,omitempty"`
+	// Email address of the new user
+	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
 }
 
 // LoginInvalidCredentialsResponseBody is the type of the "auth" service
@@ -83,11 +105,94 @@ type LoginInternalErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// RegisterInvalidInputResponseBody is the type of the "auth" service
+// "register" endpoint HTTP response body for the "invalid_input" error.
+type RegisterInvalidInputResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RegisterUserExistsResponseBody is the type of the "auth" service "register"
+// endpoint HTTP response body for the "user_exists" error.
+type RegisterUserExistsResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RegisterUnavailableResponseBody is the type of the "auth" service "register"
+// endpoint HTTP response body for the "unavailable" error.
+type RegisterUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// RegisterInternalErrorResponseBody is the type of the "auth" service
+// "register" endpoint HTTP response body for the "internal_error" error.
+type RegisterInternalErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // NewLoginRequestBody builds the HTTP request body from the payload of the
 // "login" endpoint of the "auth" service.
 func NewLoginRequestBody(p *auth.LoginPayload) *LoginRequestBody {
 	body := &LoginRequestBody{
 		Username: p.Username,
+		Password: p.Password,
+	}
+	return body
+}
+
+// NewRegisterRequestBody builds the HTTP request body from the payload of the
+// "register" endpoint of the "auth" service.
+func NewRegisterRequestBody(p *auth.RegisterPayload) *RegisterRequestBody {
+	body := &RegisterRequestBody{
+		Username: p.Username,
+		Email:    p.Email,
 		Password: p.Password,
 	}
 	return body
@@ -147,10 +252,97 @@ func NewLoginInternalError(body *LoginInternalErrorResponseBody) *goa.ServiceErr
 	return v
 }
 
+// NewRegisterResultCreated builds a "auth" service "register" endpoint result
+// from a HTTP "Created" response.
+func NewRegisterResultCreated(body *RegisterResponseBody) *auth.RegisterResult {
+	v := &auth.RegisterResult{
+		ID:       *body.ID,
+		Username: *body.Username,
+		Email:    *body.Email,
+	}
+
+	return v
+}
+
+// NewRegisterInvalidInput builds a auth service register endpoint
+// invalid_input error.
+func NewRegisterInvalidInput(body *RegisterInvalidInputResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRegisterUserExists builds a auth service register endpoint user_exists
+// error.
+func NewRegisterUserExists(body *RegisterUserExistsResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRegisterUnavailable builds a auth service register endpoint unavailable
+// error.
+func NewRegisterUnavailable(body *RegisterUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewRegisterInternalError builds a auth service register endpoint
+// internal_error error.
+func NewRegisterInternalError(body *RegisterInternalErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateLoginResponseBody runs the validations defined on LoginResponseBody
 func ValidateLoginResponseBody(body *LoginResponseBody) (err error) {
 	if body.Token == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("token", "body"))
+	}
+	return
+}
+
+// ValidateRegisterResponseBody runs the validations defined on
+// RegisterResponseBody
+func ValidateRegisterResponseBody(body *RegisterResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Username == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("username", "body"))
+	}
+	if body.Email == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("email", "body"))
 	}
 	return
 }
@@ -206,6 +398,102 @@ func ValidateLoginUnavailableResponseBody(body *LoginUnavailableResponseBody) (e
 // ValidateLoginInternalErrorResponseBody runs the validations defined on
 // LoginInternalErrorResponseBody
 func ValidateLoginInternalErrorResponseBody(body *LoginInternalErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRegisterInvalidInputResponseBody runs the validations defined on
+// RegisterInvalidInputResponseBody
+func ValidateRegisterInvalidInputResponseBody(body *RegisterInvalidInputResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRegisterUserExistsResponseBody runs the validations defined on
+// RegisterUserExistsResponseBody
+func ValidateRegisterUserExistsResponseBody(body *RegisterUserExistsResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRegisterUnavailableResponseBody runs the validations defined on
+// RegisterUnavailableResponseBody
+func ValidateRegisterUnavailableResponseBody(body *RegisterUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateRegisterInternalErrorResponseBody runs the validations defined on
+// RegisterInternalErrorResponseBody
+func ValidateRegisterInternalErrorResponseBody(body *RegisterInternalErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
