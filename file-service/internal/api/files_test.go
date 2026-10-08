@@ -60,7 +60,7 @@ func (m *mockS3PutObjectAPI) PutObject(ctx context.Context, params *s3.PutObject
 	return out, args.Error(1)
 }
 
-func TestFilesService_Upload_Success(t *testing.T) {
+func TestFilesHandler_Upload_Success(t *testing.T) {
 	body := "id,name\n1,foo\n"
 	checksum := checksumOf(body)
 	checksumB64 := func() string {
@@ -95,14 +95,14 @@ func TestFilesService_Upload_Success(t *testing.T) {
 			Size:           aws.Int64(payload.Size),
 		}, nil)
 
-	svc := NewFilesService("test-bucket", m)
-	err := svc.Upload(testCtx(), payload, io.NopCloser(strings.NewReader(body)))
+	h := NewFilesHandler("test-bucket", m)
+	err := h.Upload(testCtx(), payload, io.NopCloser(strings.NewReader(body)))
 
 	require.NoError(t, err)
 	m.AssertExpectations(t)
 }
 
-func TestFilesService_Upload_RejectsMalformedChecksum(t *testing.T) {
+func TestFilesHandler_Upload_RejectsMalformedChecksum(t *testing.T) {
 	body := "id,name\n1,foo\n"
 	payload := &files.UploadPayload{
 		Filename:    "users.csv",
@@ -113,8 +113,8 @@ func TestFilesService_Upload_RejectsMalformedChecksum(t *testing.T) {
 
 	m := new(mockS3PutObjectAPI)
 
-	svc := NewFilesService("test-bucket", m)
-	err := svc.Upload(testCtx(), payload, io.NopCloser(strings.NewReader(body)))
+	h := NewFilesHandler("test-bucket", m)
+	err := h.Upload(testCtx(), payload, io.NopCloser(strings.NewReader(body)))
 
 	require.Error(t, err)
 
@@ -124,7 +124,7 @@ func TestFilesService_Upload_RejectsMalformedChecksum(t *testing.T) {
 	m.AssertNotCalled(t, "PutObject", mock.Anything, mock.Anything, mock.Anything)
 }
 
-func TestFilesService_Upload_WrapsS3ErrorAsInternalError(t *testing.T) {
+func TestFilesHandler_Upload_WrapsS3ErrorAsInternalError(t *testing.T) {
 	body := "id,name\n1,foo\n"
 	payload := &files.UploadPayload{
 		Filename:    "users.csv",
@@ -137,8 +137,8 @@ func TestFilesService_Upload_WrapsS3ErrorAsInternalError(t *testing.T) {
 	m.On("PutObject", mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, errors.New("s3 unreachable"))
 
-	svc := NewFilesService("test-bucket", m)
-	err := svc.Upload(testCtx(), payload, io.NopCloser(strings.NewReader(body)))
+	h := NewFilesHandler("test-bucket", m)
+	err := h.Upload(testCtx(), payload, io.NopCloser(strings.NewReader(body)))
 
 	require.Error(t, err)
 
@@ -149,7 +149,7 @@ func TestFilesService_Upload_WrapsS3ErrorAsInternalError(t *testing.T) {
 	m.AssertExpectations(t)
 }
 
-func TestFilesService_Upload_ClosesBody(t *testing.T) {
+func TestFilesHandler_Upload_ClosesBody(t *testing.T) {
 	body := "id,name\n1,foo\n"
 	payload := &files.UploadPayload{
 		Filename:    "users.csv",
@@ -165,12 +165,12 @@ func TestFilesService_Upload_ClosesBody(t *testing.T) {
 	m.On("PutObject", mock.Anything, mock.Anything, mock.Anything).
 		Return(&s3.PutObjectOutput{}, nil)
 
-	svc := NewFilesService("test-bucket", m)
-	require.NoError(t, svc.Upload(testCtx(), payload, rc))
+	h := NewFilesHandler("test-bucket", m)
+	require.NoError(t, h.Upload(testCtx(), payload, rc))
 	rc.AssertExpectations(t)
 }
 
-func TestFilesService_Upload_ClosesBodyOnMalformedChecksum(t *testing.T) {
+func TestFilesHandler_Upload_ClosesBodyOnMalformedChecksum(t *testing.T) {
 	body := "id,name\n1,foo\n"
 	payload := &files.UploadPayload{
 		Filename:    "users.csv",
@@ -184,12 +184,12 @@ func TestFilesService_Upload_ClosesBodyOnMalformedChecksum(t *testing.T) {
 
 	m := new(mockS3PutObjectAPI)
 
-	svc := NewFilesService("test-bucket", m)
-	require.Error(t, svc.Upload(testCtx(), payload, rc))
+	h := NewFilesHandler("test-bucket", m)
+	require.Error(t, h.Upload(testCtx(), payload, rc))
 	rc.AssertExpectations(t)
 }
 
-func TestFilesService_Upload_ClosesBodyOnS3Failure(t *testing.T) {
+func TestFilesHandler_Upload_ClosesBodyOnS3Failure(t *testing.T) {
 	body := "id,name\n1,foo\n"
 	payload := &files.UploadPayload{
 		Filename:    "users.csv",
@@ -205,7 +205,7 @@ func TestFilesService_Upload_ClosesBodyOnS3Failure(t *testing.T) {
 	m.On("PutObject", mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, errors.New("s3 unreachable"))
 
-	svc := NewFilesService("test-bucket", m)
-	require.Error(t, svc.Upload(testCtx(), payload, rc))
+	h := NewFilesHandler("test-bucket", m)
+	require.Error(t, h.Upload(testCtx(), payload, rc))
 	rc.AssertExpectations(t)
 }

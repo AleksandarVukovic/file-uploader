@@ -33,14 +33,14 @@ func (m *mockUserService) Create(ctx context.Context, username, email, password 
 	return args.Get(0).(userservice.User), args.Error(1)
 }
 
-func TestAuthService_Login_Success(t *testing.T) {
+func TestAuthHandler_Login_Success(t *testing.T) {
 	secret := []byte("test-secret")
 	users := &mockUserService{}
 	users.On("Authenticate", mock.Anything, testUsername, testPassword).
 		Return(userservice.User{ID: 1, Username: testUsername}, nil)
-	svc := NewAuthSvc(secret, users)
+	h := NewAuthHandler(secret, users)
 
-	res, err := svc.Login(testCtx(), &auth.LoginPayload{
+	res, err := h.Login(testCtx(), &auth.LoginPayload{
 		Username: testUsername,
 		Password: testPassword,
 	})
@@ -58,7 +58,7 @@ func TestAuthService_Login_Success(t *testing.T) {
 	users.AssertExpectations(t)
 }
 
-func TestAuthService_Login_InvalidCredentials(t *testing.T) {
+func TestAuthHandler_Login_InvalidCredentials(t *testing.T) {
 	tests := []struct {
 		name     string
 		username string
@@ -75,9 +75,9 @@ func TestAuthService_Login_InvalidCredentials(t *testing.T) {
 			users := &mockUserService{}
 			users.On("Authenticate", mock.Anything, tt.username, tt.password).
 				Return(userservice.User{}, userservice.ErrInvalidCredentials)
-			svc := NewAuthSvc([]byte("test-secret"), users)
+			h := NewAuthHandler([]byte("test-secret"), users)
 
-			res, err := svc.Login(testCtx(), &auth.LoginPayload{
+			res, err := h.Login(testCtx(), &auth.LoginPayload{
 				Username: tt.username,
 				Password: tt.password,
 			})
@@ -93,7 +93,7 @@ func TestAuthService_Login_InvalidCredentials(t *testing.T) {
 	}
 }
 
-func TestAuthService_Login_UserServiceFailures(t *testing.T) {
+func TestAuthHandler_Login_UserServiceFailures(t *testing.T) {
 	tests := []struct {
 		name     string
 		err      error
@@ -108,9 +108,9 @@ func TestAuthService_Login_UserServiceFailures(t *testing.T) {
 			users := &mockUserService{}
 			users.On("Authenticate", mock.Anything, testUsername, testPassword).
 				Return(userservice.User{}, tt.err)
-			svc := NewAuthSvc([]byte("test-secret"), users)
+			h := NewAuthHandler([]byte("test-secret"), users)
 
-			res, err := svc.Login(testCtx(), &auth.LoginPayload{Username: testUsername, Password: testPassword})
+			res, err := h.Login(testCtx(), &auth.LoginPayload{Username: testUsername, Password: testPassword})
 
 			require.Nil(t, res)
 			var svcErr *goa.ServiceError
@@ -121,7 +121,7 @@ func TestAuthService_Login_UserServiceFailures(t *testing.T) {
 	}
 }
 
-func TestAuthService_Register(t *testing.T) {
+func TestAuthHandler_Register(t *testing.T) {
 	const testEmail = "john.doe@example.com"
 	payload := &auth.RegisterPayload{Username: testUsername, Email: testEmail, Password: testPassword}
 
@@ -130,7 +130,7 @@ func TestAuthService_Register(t *testing.T) {
 		users.On("Create", mock.Anything, testUsername, testEmail, testPassword).
 			Return(userservice.User{ID: 5, Username: testUsername, Email: testEmail}, nil)
 
-		res, err := NewAuthSvc([]byte("test-secret"), users).Register(testCtx(), payload)
+		res, err := NewAuthHandler([]byte("test-secret"), users).Register(testCtx(), payload)
 
 		require.NoError(t, err)
 		require.Equal(t, &auth.RegisterResult{ID: 5, Username: testUsername, Email: testEmail}, res)
@@ -153,7 +153,7 @@ func TestAuthService_Register(t *testing.T) {
 			users.On("Create", mock.Anything, testUsername, testEmail, testPassword).
 				Return(userservice.User{}, tt.err)
 
-			res, err := NewAuthSvc([]byte("test-secret"), users).Register(testCtx(), payload)
+			res, err := NewAuthHandler([]byte("test-secret"), users).Register(testCtx(), payload)
 
 			require.Nil(t, res)
 			var svcErr *goa.ServiceError

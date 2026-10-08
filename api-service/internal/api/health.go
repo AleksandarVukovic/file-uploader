@@ -6,14 +6,14 @@ import (
 	"github.com/aleksandarv/file-uploader/api-service/gen/health"
 )
 
-type healthsvc struct {
+type healthHandler struct {
 }
 
-func NewHealthSvc() health.Service {
-	return &healthsvc{}
+func NewHealthHandler() health.Service {
+	return &healthHandler{}
 }
 
-func (s healthsvc) Health(context.Context) (res *health.HealthResult, err error) {
+func (h healthHandler) Health(context.Context) (res *health.HealthResult, err error) {
 	return &health.HealthResult{
 		Status: "ok",
 	}, nil

@@ -18,19 +18,19 @@ type userService interface {
 	Create(ctx context.Context, username, email, password string) (userservice.User, error)
 }
 
-type authSvc struct {
+type authHandler struct {
 	secret []byte
 	users  userService
 }
 
-func NewAuthSvc(secret []byte, users userService) auth.Service {
-	return &authSvc{secret: secret, users: users}
+func NewAuthHandler(secret []byte, users userService) auth.Service {
+	return &authHandler{secret: secret, users: users}
 }
 
-func (s *authSvc) Login(ctx context.Context, p *auth.LoginPayload) (*auth.LoginResult, error) {
+func (h *authHandler) Login(ctx context.Context, p *auth.LoginPayload) (*auth.LoginResult, error) {
 	log := logger.FromCtx(ctx)
 
-	user, err := s.users.Authenticate(ctx, p.Username, p.Password)
+	user, err := h.users.Authenticate(ctx, p.Username, p.Password)
 	switch {
 	case errors.Is(err, userservice.ErrInvalidCredentials):
 		log.Error("login failed: invalid credentials", "username", p.Username)
@@ -49,7 +49,7 @@ func (s *authSvc) Login(ctx context.Context, p *auth.LoginPayload) (*auth.LoginR
 		IssuedAt:  jwt.NewNumericDate(now),
 		ExpiresAt: jwt.NewNumericDate(now.Add(tokenTTL)),
 	}
-	signed, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(s.secret)
+	signed, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(h.secret)
 	if err != nil {
 		log.Error("failed to sign jwt", "err", err)
 		return nil, auth.MakeInternalError(errors.New("failed to issue token"))
@@ -59,10 +59,10 @@ func (s *authSvc) Login(ctx context.Context, p *auth.LoginPayload) (*auth.LoginR
 	return &auth.LoginResult{Token: signed}, nil
 }
 
-func (s *authSvc) Register(ctx context.Context, p *auth.RegisterPayload) (*auth.RegisterResult, error) {
+func (h *authHandler) Register(ctx context.Context, p *auth.RegisterPayload) (*auth.RegisterResult, error) {
 	log := logger.FromCtx(ctx)
 
-	user, err := s.users.Create(ctx, p.Username, p.Email, p.Password)
+	user, err := h.users.Create(ctx, p.Username, p.Email, p.Password)
 	switch {
 	case errors.Is(err, userservice.ErrInvalidInput):
 		log.Error("registration rejected", "username", p.Username, "err", err)

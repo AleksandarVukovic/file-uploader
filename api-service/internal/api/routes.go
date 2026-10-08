@@ -16,10 +16,10 @@ import (
 	"goa.design/goa/v3/http/middleware"
 )
 
-func Routes(log *slog.Logger, jwtSecret []byte, filesSvc files.Service, healthSvc health.Service, authSvc auth.Service) http.Handler {
+func Routes(log *slog.Logger, jwtSecret []byte, filesHandler files.Service, healthHandler health.Service, authHandler auth.Service) http.Handler {
 	mux := goahttp.NewMuxer()
 
-	authSrv := authsvr.New(auth.NewEndpoints(authSvc), mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
+	authSrv := authsvr.New(auth.NewEndpoints(authHandler), mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
 	authSrv.Use(httpmiddleware.PanicHandler())
 	authSrv.Use(httpmiddleware.Logger(log, true))
 	authSrv.Use(middleware.PopulateRequestContext())
@@ -32,7 +32,7 @@ func Routes(log *slog.Logger, jwtSecret []byte, filesSvc files.Service, healthSv
 		log.Debug("expose auth API", "verb", m.Verb, "path", m.Pattern, "method", m.Method)
 	}
 
-	filesSrv := filessvr.New(files.NewEndpoints(filesSvc), mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
+	filesSrv := filessvr.New(files.NewEndpoints(filesHandler), mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
 	filesSrv.Use(apimiddleware.JWT(jwtSecret))
 	filesSrv.Use(httpmiddleware.PanicHandler())
 	filesSrv.Use(httpmiddleware.Logger(log, true))
@@ -46,7 +46,7 @@ func Routes(log *slog.Logger, jwtSecret []byte, filesSvc files.Service, healthSv
 		log.Debug("expose API", "verb", m.Verb, "path", m.Pattern, "method", m.Method)
 	}
 
-	healthSrv := healthsvr.New(health.NewEndpoints(healthSvc), mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
+	healthSrv := healthsvr.New(health.NewEndpoints(healthHandler), mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
 	healthSrv.Use(httpmiddleware.PanicHandler())
 	healthSrv.Use(httpmiddleware.Logger(log, false))
 	// healthSrv.Use(middleware.PopulateRequestContext())

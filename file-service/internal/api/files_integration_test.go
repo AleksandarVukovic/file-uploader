@@ -22,8 +22,8 @@ import (
 func newFileServiceServer(t *testing.T, s3API *mockS3PutObjectAPI) *httptest.Server {
 	t.Helper()
 
-	filesSvc := NewFilesService("test-bucket", s3API)
-	handler := Routes(logger.NewLogger(false), filesSvc)
+	filesHandler := NewFilesHandler("test-bucket", s3API)
+	handler := Routes(logger.NewLogger(false), filesHandler)
 
 	return httptest.NewServer(handler)
 }

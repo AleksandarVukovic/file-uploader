@@ -26,7 +26,7 @@ var (
 func newAuthServer(t *testing.T, users *mockUserService) *httptest.Server {
 	t.Helper()
 
-	handler := Routes(logger.NewLogger(false), testJWTSecret, panicFilesService{}, NewHealthSvc(), NewAuthSvc(testJWTSecret, users))
+	handler := Routes(logger.NewLogger(false), testJWTSecret, panicFilesHandler{}, NewHealthHandler(), NewAuthHandler(testJWTSecret, users))
 	return httptest.NewServer(handler)
 }
 
