@@ -36,6 +36,8 @@ func TestS3Upload_Success(t *testing.T) {
 	checksumB64 := base64.StdEncoding.EncodeToString(sum[:])
 
 	in := UploadInput{
+		UserID:      7,
+		UUID:        uuid.NewString(),
 		Filename:    "users.csv",
 		ContentType: "text/csv",
 		Size:        int64(len(body)),
@@ -43,16 +45,18 @@ func TestS3Upload_Success(t *testing.T) {
 		Body:        strings.NewReader(body),
 	}
 
+	var gotKey string
 	m := new(mockS3PutObjectAPI)
 	m.On("PutObject", mock.Anything, mock.MatchedBy(func(p *s3.PutObjectInput) bool {
 		return aws.ToString(p.Bucket) == "test-bucket" &&
-			aws.ToString(p.Key) == in.Filename &&
 			aws.ToInt64(p.ContentLength) == in.Size &&
 			aws.ToString(p.ContentType) == in.ContentType &&
 			aws.ToString(p.ChecksumSHA256) == checksumB64
 	}), mock.Anything).
 		Run(func(args mock.Arguments) {
-			b, err := io.ReadAll(args.Get(1).(*s3.PutObjectInput).Body)
+			put := args.Get(1).(*s3.PutObjectInput)
+			gotKey = aws.ToString(put.Key)
+			b, err := io.ReadAll(put.Body)
 			require.NoError(t, err)
 			require.Equal(t, body, string(b))
 		}).
@@ -64,8 +68,8 @@ func TestS3Upload_Success(t *testing.T) {
 	require.Equal(t, in.Filename, res.Filename)
 	require.Equal(t, in.ContentType, res.ContentType)
 	require.Equal(t, in.Size, res.Size)
-	_, err = uuid.Parse(res.UUID)
-	require.NoError(t, err)
+	require.Equal(t, in.UUID, res.UUID)
+	require.Equal(t, "7/"+in.UUID, gotKey)
 	m.AssertExpectations(t)
 }
 

@@ -51,14 +51,15 @@ func TestUploadEndpoint_Success(t *testing.T) {
 	body := loadTestdata(t, "users.csv")
 	checksum := checksumOf(body)
 
+	var gotKey string
 	m := new(mockS3PutObjectAPI)
 	m.On("PutObject", mock.Anything, mock.MatchedBy(func(in *s3.PutObjectInput) bool {
 		return aws.ToString(in.Bucket) == "test-bucket" &&
-			aws.ToString(in.Key) == "users.csv" &&
 			aws.ToString(in.ContentType) == "text/csv"
 	}), mock.Anything).
 		Run(func(args mock.Arguments) {
 			in := args.Get(1).(*s3.PutObjectInput)
+			gotKey = aws.ToString(in.Key)
 			b, err := io.ReadAll(in.Body)
 			require.NoError(t, err)
 			require.Equal(t, body, string(b))
@@ -83,6 +84,7 @@ func TestUploadEndpoint_Success(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&got))
 	_, err = uuid.Parse(got.UUID)
 	require.NoError(t, err)
+	require.Equal(t, "1/"+got.UUID, gotKey)
 	require.Equal(t, "users.csv", got.Filename)
 	require.Equal(t, "text/csv", got.ContentType)
 	require.Equal(t, len(body), got.Size)
