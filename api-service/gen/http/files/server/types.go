@@ -13,6 +13,19 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// UploadResponseBody is the type of the "files" service "upload" endpoint HTTP
+// response body.
+type UploadResponseBody struct {
+	// Identifier of the stored file
+	UUID string `form:"uuid" json:"uuid" xml:"uuid"`
+	// Name of the stored file
+	Filename string `form:"filename" json:"filename" xml:"filename"`
+	// MIME type of the stored file
+	ContentType string `form:"contentType" json:"contentType" xml:"contentType"`
+	// Size of the stored file in bytes
+	Size int64 `form:"size" json:"size" xml:"size"`
+}
+
 // UploadBadRequestResponseBody is the type of the "files" service "upload"
 // endpoint HTTP response body for the "bad_request" error.
 type UploadBadRequestResponseBody struct {
@@ -47,6 +60,18 @@ type UploadInternalErrorResponseBody struct {
 	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
 	// Is the error a server-side fault?
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// NewUploadResponseBody builds the HTTP response body from the result of the
+// "upload" endpoint of the "files" service.
+func NewUploadResponseBody(res *files.UploadResult) *UploadResponseBody {
+	body := &UploadResponseBody{
+		UUID:        res.UUID,
+		Filename:    res.Filename,
+		ContentType: res.ContentType,
+		Size:        res.Size,
+	}
+	return body
 }
 
 // NewUploadBadRequestResponseBody builds the HTTP response body from the

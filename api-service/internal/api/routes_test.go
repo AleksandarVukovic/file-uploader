@@ -44,7 +44,7 @@ func validToken(t *testing.T, secret []byte) string {
 
 type panicFilesHandler struct{}
 
-func (panicFilesHandler) Upload(context.Context, *files.UploadPayload, io.ReadCloser) error {
+func (panicFilesHandler) Upload(context.Context, *files.UploadPayload, io.ReadCloser) (*files.UploadResult, error) {
 	panic("boom: upload handler panicked")
 }
 

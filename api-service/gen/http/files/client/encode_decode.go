@@ -103,8 +103,21 @@ func DecodeUploadResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 			}()
 		}
 		switch resp.StatusCode {
-		case http.StatusNoContent:
-			return nil, nil
+		case http.StatusCreated:
+			var (
+				body UploadResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("files", "upload", err)
+			}
+			err = ValidateUploadResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("files", "upload", err)
+			}
+			res := NewUploadResultCreated(&body)
+			return res, nil
 		case http.StatusBadRequest:
 			var (
 				body UploadBadRequestResponseBody

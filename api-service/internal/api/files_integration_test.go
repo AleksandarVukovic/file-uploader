@@ -83,7 +83,9 @@ func TestUploadEndpoint_Success(t *testing.T) {
 		b, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
 		gotBody = b
-		w.WriteHeader(http.StatusNoContent)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{"uuid": testUUID, "filename": "users.csv", "contentType": "text/csv", "size": len(b)})
 	}))
 	defer fakeFileService.Close()
 
@@ -95,7 +97,18 @@ func TestUploadEndpoint_Success(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	var got struct {
+		UUID        string `json:"uuid"`
+		Filename    string `json:"filename"`
+		ContentType string `json:"contentType"`
+		Size        int    `json:"size"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&got))
+	require.Equal(t, testUUID, got.UUID)
+	require.Equal(t, "users.csv", got.Filename)
+	require.Equal(t, "text/csv", got.ContentType)
+	require.Equal(t, len(body), got.Size)
 	require.Equal(t, "users.csv", gotFilename)
 	require.Equal(t, strconv.Itoa(len(body)), gotSize)
 	require.Equal(t, checksum, gotChecksum)
@@ -139,7 +152,7 @@ func TestUploadEndpoint_RejectsOversizedDeclaredSize(t *testing.T) {
 	fileServiceCalled := false
 	fakeFileService := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fileServiceCalled = true
-		w.WriteHeader(http.StatusNoContent)
+		w.WriteHeader(http.StatusCreated)
 	}))
 	defer fakeFileService.Close()
 

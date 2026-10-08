@@ -4,6 +4,7 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 
@@ -26,7 +27,19 @@ var _ = Describe("Upload", func() {
 		Expect(err).NotTo(HaveOccurred())
 		defer resp.Body.Close()
 
-		Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
+		Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+
+		var uploaded struct {
+			UUID        string `json:"uuid"`
+			Filename    string `json:"filename"`
+			ContentType string `json:"contentType"`
+			Size        int    `json:"size"`
+		}
+		Expect(json.NewDecoder(resp.Body).Decode(&uploaded)).To(Succeed())
+		Expect(uploaded.UUID).NotTo(BeEmpty())
+		Expect(uploaded.Filename).To(Equal("e2e-upload.csv"))
+		Expect(uploaded.ContentType).To(Equal("text/csv"))
+		Expect(uploaded.Size).To(Equal(len(body)))
 
 		out, err := s3Client.GetObject(context.Background(), &s3.GetObjectInput{
 			Bucket: aws.String(e2eS3Bucket),

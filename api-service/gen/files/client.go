@@ -32,7 +32,11 @@ func NewClient(upload goa.Endpoint) *Client {
 //   - "bad_request" (type *goa.ServiceError): Invalid request payload.
 //   - "internal_error" (type *goa.ServiceError): Fault in the service.
 //   - error: internal error
-func (c *Client) Upload(ctx context.Context, p *UploadPayload, req io.ReadCloser) (err error) {
-	_, err = c.UploadEndpoint(ctx, &UploadRequestData{Payload: p, Body: req})
-	return
+func (c *Client) Upload(ctx context.Context, p *UploadPayload, req io.ReadCloser) (res *UploadResult, err error) {
+	var ires any
+	ires, err = c.UploadEndpoint(ctx, &UploadRequestData{Payload: p, Body: req})
+	if err != nil {
+		return
+	}
+	return ires.(*UploadResult), nil
 }

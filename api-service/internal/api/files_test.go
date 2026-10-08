@@ -35,12 +35,15 @@ func (m *mockReadCloser) Close() error {
 	return m.Called().Error(0)
 }
 
+const testUUID = "0b8e6f1c-3f0a-4a53-9f44-2f6a1d7a8c11"
+
 type mockFileService struct {
 	mock.Mock
 }
 
-func (m *mockFileService) Upload(ctx context.Context, p *fsfiles.UploadPayload, body io.ReadCloser) error {
-	return m.Called(ctx, p, body).Error(0)
+func (m *mockFileService) Upload(ctx context.Context, p *fsfiles.UploadPayload, body io.ReadCloser) (*fsfiles.UploadResult, error) {
+	args := m.Called(ctx, p, body)
+	return args.Get(0).(*fsfiles.UploadResult), args.Error(1)
 }
 
 func expectedDownstreamPayload(p *files.UploadPayload) *fsfiles.UploadPayload {
@@ -68,12 +71,13 @@ func TestFilesHandler_Upload_Success(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, body, string(b))
 		}).
-		Return(nil)
+		Return(&fsfiles.UploadResult{UUID: testUUID, Filename: payload.Filename, ContentType: payload.ContentType, Size: payload.Size}, nil)
 
 	h := NewFilesHandler(mockfs)
-	err := h.Upload(testCtx(), payload, io.NopCloser(strings.NewReader(body)))
+	res, err := h.Upload(testCtx(), payload, io.NopCloser(strings.NewReader(body)))
 
 	require.NoError(t, err)
+	require.Equal(t, &files.UploadResult{UUID: testUUID, Filename: payload.Filename, ContentType: payload.ContentType, Size: payload.Size}, res)
 	mockfs.AssertExpectations(t)
 }
 
@@ -88,10 +92,10 @@ func TestFilesHandler_Upload_ForwardsBadRequestFromFileService(t *testing.T) {
 
 	mockfs := new(mockFileService)
 	mockfs.On("Upload", mock.Anything, expectedDownstreamPayload(payload), mock.Anything).
-		Return(fsfiles.MakeBadRequest(errors.New("File size does not match declared size")))
+		Return((*fsfiles.UploadResult)(nil), fsfiles.MakeBadRequest(errors.New("File size does not match declared size")))
 
 	h := NewFilesHandler(mockfs)
-	err := h.Upload(testCtx(), payload, io.NopCloser(strings.NewReader(body)))
+	_, err := h.Upload(testCtx(), payload, io.NopCloser(strings.NewReader(body)))
 
 	require.Error(t, err)
 
@@ -130,10 +134,10 @@ func TestFilesHandler_Upload_WrapsOtherFileServiceErrorsAsInternalError(t *testi
 
 			mockfs := new(mockFileService)
 			mockfs.On("Upload", mock.Anything, expectedDownstreamPayload(payload), mock.Anything).
-				Return(tt.err)
+				Return((*fsfiles.UploadResult)(nil), tt.err)
 
 			h := NewFilesHandler(mockfs)
-			err := h.Upload(testCtx(), payload, io.NopCloser(strings.NewReader(body)))
+			_, err := h.Upload(testCtx(), payload, io.NopCloser(strings.NewReader(body)))
 
 			require.Error(t, err)
 
@@ -159,10 +163,11 @@ func TestFilesHandler_Upload_ClosesBody(t *testing.T) {
 	rc.On("Close").Return(nil)
 
 	mockfs := new(mockFileService)
-	mockfs.On("Upload", mock.Anything, expectedDownstreamPayload(payload), mock.Anything).Return(nil)
+	mockfs.On("Upload", mock.Anything, expectedDownstreamPayload(payload), mock.Anything).Return(&fsfiles.UploadResult{}, nil)
 
 	h := NewFilesHandler(mockfs)
-	require.NoError(t, h.Upload(testCtx(), payload, rc))
+	_, err := h.Upload(testCtx(), payload, rc)
+	require.NoError(t, err)
 	rc.AssertExpectations(t)
 	mockfs.AssertExpectations(t)
 }
@@ -181,10 +186,11 @@ func TestFilesHandler_Upload_ClosesBodyOnFileServiceFailure(t *testing.T) {
 
 	mockfs := new(mockFileService)
 	mockfs.On("Upload", mock.Anything, expectedDownstreamPayload(payload), mock.Anything).
-		Return(errors.New("s3 unreachable"))
+		Return((*fsfiles.UploadResult)(nil), errors.New("s3 unreachable"))
 
 	h := NewFilesHandler(mockfs)
-	require.Error(t, h.Upload(testCtx(), payload, rc))
+	_, err := h.Upload(testCtx(), payload, rc)
+	require.Error(t, err)
 	rc.AssertExpectations(t)
 	mockfs.AssertExpectations(t)
 }

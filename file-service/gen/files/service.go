@@ -18,7 +18,7 @@ import (
 // Service manages upload of single files.
 type Service interface {
 	// Uploads a whole file with max size of 10Mb.
-	Upload(context.Context, *UploadPayload, io.ReadCloser) (err error)
+	Upload(context.Context, *UploadPayload, io.ReadCloser) (res *UploadResult, err error)
 }
 
 // APIName is the name of the API as defined in the design.
@@ -47,6 +47,18 @@ type UploadPayload struct {
 	ContentType string
 	// Expected SHA-256 checksum of the file
 	Checksum string
+}
+
+// UploadResult is the result type of the files service upload method.
+type UploadResult struct {
+	// Identifier of the stored file
+	UUID string
+	// Name of the stored file
+	Filename string
+	// MIME type of the stored file
+	ContentType string
+	// Size of the stored file in bytes
+	Size int64
 }
 
 // MakeBadRequest builds a goa.ServiceError from an error.

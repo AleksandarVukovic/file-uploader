@@ -26,7 +26,7 @@ func (s *s3Service) Upload(ctx context.Context, in UploadInput) (UploadResult, e
 		return UploadResult{}, ErrInvalidChecksum
 	}
 
-	out, err := s.s3.PutObject(ctx, &awss3.PutObjectInput{
+	_, err = s.s3.PutObject(ctx, &awss3.PutObjectInput{
 		Bucket:         aws.String(s.bucketName),
 		Key:            aws.String(in.Filename),
 		Body:           in.Body,
@@ -41,6 +41,6 @@ func (s *s3Service) Upload(ctx context.Context, in UploadInput) (UploadResult, e
 		UUID:        uuid.NewString(),
 		Filename:    in.Filename,
 		ContentType: in.ContentType,
-		Size:        aws.ToInt64(out.Size),
+		Size:        in.Size,
 	}, nil
 }

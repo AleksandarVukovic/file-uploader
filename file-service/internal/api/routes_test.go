@@ -26,7 +26,7 @@ var (
 
 type panicFilesHandler struct{}
 
-func (panicFilesHandler) Upload(context.Context, *files.UploadPayload, io.ReadCloser) error {
+func (panicFilesHandler) Upload(context.Context, *files.UploadPayload, io.ReadCloser) (*files.UploadResult, error) {
 	panic("boom: upload handler panicked")
 }
 
@@ -36,9 +36,9 @@ func (panicHealthHandler) Health(context.Context) (*health.HealthResult, error) 
 	panic("boom: health handler panicked")
 }
 
-type filesHandlerFunc func(context.Context, *files.UploadPayload, io.ReadCloser) error
+type filesHandlerFunc func(context.Context, *files.UploadPayload, io.ReadCloser) (*files.UploadResult, error)
 
-func (f filesHandlerFunc) Upload(ctx context.Context, p *files.UploadPayload, body io.ReadCloser) error {
+func (f filesHandlerFunc) Upload(ctx context.Context, p *files.UploadPayload, body io.ReadCloser) (*files.UploadResult, error) {
 	return f(ctx, p, body)
 }
 
@@ -157,9 +157,9 @@ func TestRoutes_RequestID_RequiredForFilesEndpoint(t *testing.T) {
 
 	log, _ := newBufferLogger()
 	fileServiceCalled := false
-	h := filesHandlerFunc(func(_ context.Context, _ *files.UploadPayload, body io.ReadCloser) error {
+	h := filesHandlerFunc(func(_ context.Context, _ *files.UploadPayload, body io.ReadCloser) (*files.UploadResult, error) {
 		fileServiceCalled = true
-		return body.Close()
+		return &files.UploadResult{}, body.Close()
 	})
 	srv := httptest.NewServer(Routes(log, h))
 	defer srv.Close()

@@ -62,8 +62,17 @@ paths:
                     maxLength: 64
                   example: 9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08
             responses:
-                "204":
-                    description: No Content response.
+                "201":
+                    description: Created response.
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/UploadResponseBody'
+                            example:
+                                contentType: text/csv
+                                filename: users.csv
+                                size: 1048576
+                                uuid: 0b8e6f1c-3f0a-4a53-9f44-2f6a1d7a8c11
                 "400":
                     description: 'bad_request: Invalid request payload.'
                     content:
@@ -422,6 +431,37 @@ components:
                 - id
                 - username
                 - email
+        UploadResponseBody:
+            type: object
+            properties:
+                contentType:
+                    type: string
+                    description: MIME type of the stored file
+                    example: text/csv
+                filename:
+                    type: string
+                    description: Name of the stored file
+                    example: users.csv
+                size:
+                    type: integer
+                    description: Size of the stored file in bytes
+                    example: 1048576
+                    format: int64
+                uuid:
+                    type: string
+                    description: Identifier of the stored file
+                    example: 0b8e6f1c-3f0a-4a53-9f44-2f6a1d7a8c11
+                    format: uuid
+            example:
+                contentType: text/csv
+                filename: users.csv
+                size: 1048576
+                uuid: 0b8e6f1c-3f0a-4a53-9f44-2f6a1d7a8c11
+            required:
+                - uuid
+                - filename
+                - contentType
+                - size
 tags:
     - name: files
       description: Service manages upload of single files.

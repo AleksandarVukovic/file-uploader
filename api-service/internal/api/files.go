@@ -21,13 +21,13 @@ func NewFilesHandler(fileServiceClient goafs.Service) goaApi.Service {
 	return &filesHandler{fsClient: fileServiceClient}
 }
 
-func (h *filesHandler) Upload(ctx context.Context, p *goaApi.UploadPayload, body io.ReadCloser) error {
+func (h *filesHandler) Upload(ctx context.Context, p *goaApi.UploadPayload, body io.ReadCloser) (*goaApi.UploadResult, error) {
 	log := logger.FromCtx(ctx)
 	defer body.Close()
 
 	// ensure that we don't accept body bigger than maxUploadSize
 	lbody := io.NopCloser(io.LimitReader(body, maxUploadSize))
-	err := h.fsClient.Upload(ctx, &goafs.UploadPayload{
+	res, err := h.fsClient.Upload(ctx, &goafs.UploadPayload{
 		Filename:    p.Filename,
 		Size:        p.Size,
 		ContentType: p.ContentType,
@@ -38,12 +38,17 @@ func (h *filesHandler) Upload(ctx context.Context, p *goaApi.UploadPayload, body
 		var svcErr *goa.ServiceError
 		if errors.As(err, &svcErr) && svcErr.Name == "bad_request" {
 			log.Error("upload rejected by file-service", "filename", p.Filename, "err", err)
-			return goaApi.MakeBadRequest(errors.New(svcErr.Message))
+			return nil, goaApi.MakeBadRequest(errors.New(svcErr.Message))
 		}
 		log.Error("failed to forward upload to file-service", "filename", p.Filename, "err", err)
-		return goaApi.MakeInternalError(errors.New("Error while storing file"))
+		return nil, goaApi.MakeInternalError(errors.New("Error while storing file"))
 	}
 
-	log.Info("file uploaded successfully", "filename", p.Filename)
-	return nil
+	log.Info("file uploaded successfully", "uuid", res.UUID, "filename", res.Filename)
+	return &goaApi.UploadResult{
+		UUID:        res.UUID,
+		Filename:    res.Filename,
+		ContentType: res.ContentType,
+		Size:        res.Size,
+	}, nil
 }
