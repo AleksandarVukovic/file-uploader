@@ -13,10 +13,10 @@ import (
 	"goa.design/goa/v3/http/middleware"
 )
 
-func Routes(log *slog.Logger, filesSvc files.Service) http.Handler {
+func Routes(log *slog.Logger, filesHandler files.Service) http.Handler {
 	mux := goahttp.NewMuxer()
 
-	filesSrv := filessvr.New(files.NewEndpoints(filesSvc), mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
+	filesSrv := filessvr.New(files.NewEndpoints(filesHandler), mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
 	filesSrv.Use(httpmiddleware.PanicHandler())
 	filesSrv.Use(httpmiddleware.Logger(log, true))
 	filesSrv.Use(httpmiddleware.RequireRequestID())
@@ -29,10 +29,10 @@ func Routes(log *slog.Logger, filesSvc files.Service) http.Handler {
 	return mux
 }
 
-func HealthRoutes(log *slog.Logger, healthSvc health.Service) http.Handler {
+func HealthRoutes(log *slog.Logger, healthHandler health.Service) http.Handler {
 	mux := goahttp.NewMuxer()
 
-	healthSrv := healthsvr.New(health.NewEndpoints(healthSvc), mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
+	healthSrv := healthsvr.New(health.NewEndpoints(healthHandler), mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
 	healthSrv.Use(httpmiddleware.PanicHandler())
 	healthSrv.Use(httpmiddleware.Logger(log, false))
 	healthSrv.Mount(mux)

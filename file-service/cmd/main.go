@@ -69,7 +69,7 @@ func run() error {
 		}
 	})
 
-	filesService := api.NewFilesService(s3BucketName, s3Client)
+	filesService := api.NewFilesHandler(s3BucketName, s3Client)
 
 	tlsCfg, err := tls.NewServerConfig(tlsCertFile, tlsKeyFile, tlsCACertFile)
 	if err != nil {
@@ -80,7 +80,7 @@ func run() error {
 	healthAddr := ":" + strconv.Itoa(healthPort)
 	healthSrv := &http.Server{
 		Addr:              healthAddr,
-		Handler:           api.HealthRoutes(log, api.NewHealthSvc()),
+		Handler:           api.HealthRoutes(log, api.NewHealthHandler()),
 		ReadHeaderTimeout: time.Second * 60,
 	}
 

@@ -42,15 +42,15 @@ func validToken(t *testing.T, secret []byte) string {
 	return signed
 }
 
-type panicFilesService struct{}
+type panicFilesHandler struct{}
 
-func (panicFilesService) Upload(context.Context, *files.UploadPayload, io.ReadCloser) error {
+func (panicFilesHandler) Upload(context.Context, *files.UploadPayload, io.ReadCloser) error {
 	panic("boom: upload handler panicked")
 }
 
-type panicHealthService struct{}
+type panicHealthHandler struct{}
 
-func (panicHealthService) Health(context.Context) (*health.HealthResult, error) {
+func (panicHealthHandler) Health(context.Context) (*health.HealthResult, error) {
 	panic("boom: health handler panicked")
 }
 
@@ -94,7 +94,7 @@ func TestRoutes_HealthPath_Mounted(t *testing.T) {
 	t.Parallel()
 
 	log, _ := newBufferLogger()
-	srv := httptest.NewServer(Routes(log, testJWTSecret, panicFilesService{}, NewHealthSvc(), NewAuthSvc(testJWTSecret, &mockUserService{})))
+	srv := httptest.NewServer(Routes(log, testJWTSecret, panicFilesHandler{}, NewHealthHandler(), NewAuthHandler(testJWTSecret, &mockUserService{})))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + healthPath)
@@ -107,7 +107,7 @@ func TestRoutes_PanicRecovery_FilesEndpoint(t *testing.T) {
 	t.Parallel()
 
 	log, logs := newBufferLogger()
-	srv := httptest.NewServer(Routes(log, testJWTSecret, panicFilesService{}, NewHealthSvc(), NewAuthSvc(testJWTSecret, &mockUserService{})))
+	srv := httptest.NewServer(Routes(log, testJWTSecret, panicFilesHandler{}, NewHealthHandler(), NewAuthHandler(testJWTSecret, &mockUserService{})))
 	defer srv.Close()
 
 	req := newMinimalUploadRequest(t, srv.URL, nil)
@@ -124,7 +124,7 @@ func TestRoutes_PanicRecovery_HealthEndpoint(t *testing.T) {
 	t.Parallel()
 
 	log, _ := newBufferLogger()
-	srv := httptest.NewServer(Routes(log, testJWTSecret, panicFilesService{}, panicHealthService{}, NewAuthSvc(testJWTSecret, &mockUserService{})))
+	srv := httptest.NewServer(Routes(log, testJWTSecret, panicFilesHandler{}, panicHealthHandler{}, NewAuthHandler(testJWTSecret, &mockUserService{})))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + healthPath)
@@ -140,7 +140,7 @@ func TestRoutes_RequestID_HonorsIncomingHeader(t *testing.T) {
 	t.Parallel()
 
 	log, logs := newBufferLogger()
-	srv := httptest.NewServer(Routes(log, testJWTSecret, panicFilesService{}, NewHealthSvc(), NewAuthSvc(testJWTSecret, &mockUserService{})))
+	srv := httptest.NewServer(Routes(log, testJWTSecret, panicFilesHandler{}, NewHealthHandler(), NewAuthHandler(testJWTSecret, &mockUserService{})))
 	defer srv.Close()
 
 	req := newMinimalUploadRequest(t, srv.URL, map[string]string{"X-Request-Id": "custom-request-id-123"})
@@ -155,7 +155,7 @@ func TestRoutes_RequestID_TruncatesLongIncomingHeader(t *testing.T) {
 	t.Parallel()
 
 	log, logs := newBufferLogger()
-	srv := httptest.NewServer(Routes(log, testJWTSecret, panicFilesService{}, NewHealthSvc(), NewAuthSvc(testJWTSecret, &mockUserService{})))
+	srv := httptest.NewServer(Routes(log, testJWTSecret, panicFilesHandler{}, NewHealthHandler(), NewAuthHandler(testJWTSecret, &mockUserService{})))
 	defer srv.Close()
 
 	longID := strings.Repeat("a", 100)
@@ -171,7 +171,7 @@ func TestRoutes_RequestID_GeneratesUniqueIDsWhenHeaderAbsent(t *testing.T) {
 	t.Parallel()
 
 	log, logs := newBufferLogger()
-	srv := httptest.NewServer(Routes(log, testJWTSecret, panicFilesService{}, NewHealthSvc(), NewAuthSvc(testJWTSecret, &mockUserService{})))
+	srv := httptest.NewServer(Routes(log, testJWTSecret, panicFilesHandler{}, NewHealthHandler(), NewAuthHandler(testJWTSecret, &mockUserService{})))
 	defer srv.Close()
 
 	resp1, err := http.DefaultClient.Do(newMinimalUploadRequest(t, srv.URL, nil))

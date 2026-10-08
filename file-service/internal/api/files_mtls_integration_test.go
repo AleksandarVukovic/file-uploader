@@ -38,7 +38,7 @@ func newMTLSFileServiceServer(t *testing.T, s3API *mockS3PutObjectAPI) *httptest
 	)
 	require.NoError(t, err)
 
-	handler := Routes(logger.NewLogger(false), NewFilesService("test-bucket", s3API))
+	handler := Routes(logger.NewLogger(false), NewFilesHandler("test-bucket", s3API))
 
 	srv := httptest.NewUnstartedServer(handler)
 	srv.TLS = tlsCfg

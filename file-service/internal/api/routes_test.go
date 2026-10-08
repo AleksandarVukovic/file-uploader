@@ -24,21 +24,21 @@ var (
 	healthPath      = healthsvr.HealthHealthPath()
 )
 
-type panicFilesService struct{}
+type panicFilesHandler struct{}
 
-func (panicFilesService) Upload(context.Context, *files.UploadPayload, io.ReadCloser) error {
+func (panicFilesHandler) Upload(context.Context, *files.UploadPayload, io.ReadCloser) error {
 	panic("boom: upload handler panicked")
 }
 
-type panicHealthService struct{}
+type panicHealthHandler struct{}
 
-func (panicHealthService) Health(context.Context) (*health.HealthResult, error) {
+func (panicHealthHandler) Health(context.Context) (*health.HealthResult, error) {
 	panic("boom: health handler panicked")
 }
 
-type filesServiceFunc func(context.Context, *files.UploadPayload, io.ReadCloser) error
+type filesHandlerFunc func(context.Context, *files.UploadPayload, io.ReadCloser) error
 
-func (f filesServiceFunc) Upload(ctx context.Context, p *files.UploadPayload, body io.ReadCloser) error {
+func (f filesHandlerFunc) Upload(ctx context.Context, p *files.UploadPayload, body io.ReadCloser) error {
 	return f(ctx, p, body)
 }
 
@@ -81,7 +81,7 @@ func TestHealthRoutes_HealthPath_Mounted(t *testing.T) {
 	t.Parallel()
 
 	log, _ := newBufferLogger()
-	srv := httptest.NewServer(HealthRoutes(log, NewHealthSvc()))
+	srv := httptest.NewServer(HealthRoutes(log, NewHealthHandler()))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + healthPath)
@@ -94,7 +94,7 @@ func TestHealthRoutes_DoesNotMountFilesEndpoint(t *testing.T) {
 	t.Parallel()
 
 	log, _ := newBufferLogger()
-	srv := httptest.NewServer(HealthRoutes(log, NewHealthSvc()))
+	srv := httptest.NewServer(HealthRoutes(log, NewHealthHandler()))
 	defer srv.Close()
 
 	req := newMinimalUploadRequest(t, srv.URL, nil)
@@ -109,7 +109,7 @@ func TestRoutes_DoesNotMountHealthEndpoint(t *testing.T) {
 	t.Parallel()
 
 	log, _ := newBufferLogger()
-	srv := httptest.NewServer(Routes(log, panicFilesService{}))
+	srv := httptest.NewServer(Routes(log, panicFilesHandler{}))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + healthPath)
@@ -123,7 +123,7 @@ func TestRoutes_PanicRecovery_FilesEndpoint(t *testing.T) {
 	t.Parallel()
 
 	log, logs := newBufferLogger()
-	srv := httptest.NewServer(Routes(log, panicFilesService{}))
+	srv := httptest.NewServer(Routes(log, panicFilesHandler{}))
 	defer srv.Close()
 
 	req := newMinimalUploadRequest(t, srv.URL, map[string]string{"X-Request-Id": "req-1"})
@@ -140,7 +140,7 @@ func TestHealthRoutes_PanicRecovery(t *testing.T) {
 	t.Parallel()
 
 	log, _ := newBufferLogger()
-	srv := httptest.NewServer(HealthRoutes(log, panicHealthService{}))
+	srv := httptest.NewServer(HealthRoutes(log, panicHealthHandler{}))
 	defer srv.Close()
 
 	resp, err := http.Get(srv.URL + healthPath)
@@ -157,11 +157,11 @@ func TestRoutes_RequestID_RequiredForFilesEndpoint(t *testing.T) {
 
 	log, _ := newBufferLogger()
 	fileServiceCalled := false
-	svc := filesServiceFunc(func(_ context.Context, _ *files.UploadPayload, body io.ReadCloser) error {
+	h := filesHandlerFunc(func(_ context.Context, _ *files.UploadPayload, body io.ReadCloser) error {
 		fileServiceCalled = true
 		return body.Close()
 	})
-	srv := httptest.NewServer(Routes(log, svc))
+	srv := httptest.NewServer(Routes(log, h))
 	defer srv.Close()
 
 	req := newMinimalUploadRequest(t, srv.URL, nil)
@@ -177,7 +177,7 @@ func TestRoutes_RequestID_PropagatesIncomingHeader(t *testing.T) {
 	t.Parallel()
 
 	log, logs := newBufferLogger()
-	srv := httptest.NewServer(Routes(log, panicFilesService{}))
+	srv := httptest.NewServer(Routes(log, panicFilesHandler{}))
 	defer srv.Close()
 
 	req := newMinimalUploadRequest(t, srv.URL, map[string]string{"X-Request-Id": "custom-request-id-123"})

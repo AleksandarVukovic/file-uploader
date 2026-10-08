@@ -14,19 +14,19 @@ import (
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
-type filesService struct {
+type filesHandler struct {
 	s3         s3.API
 	bucketName string
 }
 
-func NewFilesService(bucketName string, s3Client s3.API) files.Service {
-	return &filesService{
+func NewFilesHandler(bucketName string, s3Client s3.API) files.Service {
+	return &filesHandler{
 		s3:         s3Client,
 		bucketName: bucketName,
 	}
 }
 
-func (s *filesService) Upload(ctx context.Context, p *files.UploadPayload, body io.ReadCloser) error {
+func (h *filesHandler) Upload(ctx context.Context, p *files.UploadPayload, body io.ReadCloser) error {
 	log := logger.FromCtx(ctx)
 	defer body.Close()
 
@@ -37,8 +37,8 @@ func (s *filesService) Upload(ctx context.Context, p *files.UploadPayload, body 
 	}
 
 	checksumB64 := base64.StdEncoding.EncodeToString(checksumBytes)
-	po, err := s.s3.PutObject(ctx, &awss3.PutObjectInput{
-		Bucket:         aws.String(s.bucketName),
+	po, err := h.s3.PutObject(ctx, &awss3.PutObjectInput{
+		Bucket:         aws.String(h.bucketName),
 		Key:            aws.String(p.Filename),
 		Body:           body,
 		ContentLength:  aws.Int64(p.Size),

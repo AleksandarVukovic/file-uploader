@@ -75,7 +75,7 @@ func run() error {
 	}
 
 	fsClient := fileservice.NewClient(fsURL.Scheme, fsURL.Host, debug, client.NewDoer(debug, tlsCfg))
-	filesService := api.NewFilesSvc(fsClient)
+	filesService := api.NewFilesHandler(fsClient)
 
 	userConn, err := grpc.NewClient(userServiceAddr,
 		grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)),
@@ -86,9 +86,9 @@ func run() error {
 		return err
 	}
 	defer userConn.Close()
-	authService := api.NewAuthSvc([]byte(jwtSecret), userservice.NewClient(userConn))
+	authService := api.NewAuthHandler([]byte(jwtSecret), userservice.NewClient(userConn))
 
-	handler := api.Routes(log, []byte(jwtSecret), filesService, api.NewHealthSvc(), authService)
+	handler := api.Routes(log, []byte(jwtSecret), filesService, api.NewHealthHandler(), authService)
 
 	addr := ":" + strconv.Itoa(port)
 	srv := &http.Server{
