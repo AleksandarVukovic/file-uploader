@@ -1,18 +1,17 @@
-package storage
+package objectstore
 
 import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"errors"
 	"io"
 	"strings"
 	"testing"
 
+	"github.com/aleksandarv/file-uploader/file-service/internal/service/storage"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -30,66 +29,46 @@ func (m *mockS3PutObjectAPI) PutObject(ctx context.Context, params *s3.PutObject
 	return out, args.Error(1)
 }
 
-func TestS3Upload_Success(t *testing.T) {
+func TestS3Put_Success(t *testing.T) {
 	body := "id,name\n1,foo\n"
 	sum := sha256.Sum256([]byte(body))
-	checksumB64 := base64.StdEncoding.EncodeToString(sum[:])
-
-	in := UploadInput{
-		UserID:      7,
-		UUID:        uuid.NewString(),
-		Filename:    "users.csv",
-		ContentType: "text/csv",
-		Size:        int64(len(body)),
-		Checksum:    hex.EncodeToString(sum[:]),
-		Body:        strings.NewReader(body),
+	in := storage.PutInput{
+		Key:            "7/0b8e6f1c-3f0a-4a53-9f44-2f6a1d7a8c11",
+		Body:           strings.NewReader(body),
+		Size:           int64(len(body)),
+		ContentType:    "text/csv",
+		ChecksumSHA256: sum[:],
 	}
 
-	var gotKey string
 	m := new(mockS3PutObjectAPI)
 	m.On("PutObject", mock.Anything, mock.MatchedBy(func(p *s3.PutObjectInput) bool {
 		return aws.ToString(p.Bucket) == "test-bucket" &&
+			aws.ToString(p.Key) == in.Key &&
 			aws.ToInt64(p.ContentLength) == in.Size &&
 			aws.ToString(p.ContentType) == in.ContentType &&
-			aws.ToString(p.ChecksumSHA256) == checksumB64
+			aws.ToString(p.ChecksumSHA256) == base64.StdEncoding.EncodeToString(sum[:])
 	}), mock.Anything).
 		Run(func(args mock.Arguments) {
-			put := args.Get(1).(*s3.PutObjectInput)
-			gotKey = aws.ToString(put.Key)
-			b, err := io.ReadAll(put.Body)
+			b, err := io.ReadAll(args.Get(1).(*s3.PutObjectInput).Body)
 			require.NoError(t, err)
 			require.Equal(t, body, string(b))
 		}).
 		Return(&s3.PutObjectOutput{Size: aws.Int64(in.Size)}, nil)
 
-	res, err := NewS3("test-bucket", m).Upload(context.Background(), in)
+	err := NewS3("test-bucket", m).Put(context.Background(), in)
 
 	require.NoError(t, err)
-	require.Equal(t, in.Filename, res.Filename)
-	require.Equal(t, in.ContentType, res.ContentType)
-	require.Equal(t, in.Size, res.Size)
-	require.Equal(t, in.UUID, res.UUID)
-	require.Equal(t, "7/"+in.UUID, gotKey)
 	m.AssertExpectations(t)
 }
 
-func TestS3Upload_ReturnsS3Error(t *testing.T) {
+func TestS3Put_ReturnsS3Error(t *testing.T) {
 	boom := errors.New("s3 unreachable")
 
 	m := new(mockS3PutObjectAPI)
 	m.On("PutObject", mock.Anything, mock.Anything, mock.Anything).Return(nil, boom)
 
-	_, err := NewS3("test-bucket", m).Upload(context.Background(), UploadInput{Body: strings.NewReader("x")})
+	err := NewS3("test-bucket", m).Put(context.Background(), storage.PutInput{Body: strings.NewReader("x")})
 
 	require.ErrorIs(t, err, boom)
 	m.AssertExpectations(t)
-}
-
-func TestS3Upload_RejectsMalformedChecksum(t *testing.T) {
-	m := new(mockS3PutObjectAPI)
-
-	_, err := NewS3("test-bucket", m).Upload(context.Background(), UploadInput{Checksum: "not-hex", Body: strings.NewReader("x")})
-
-	require.ErrorIs(t, err, ErrInvalidChecksum)
-	m.AssertNotCalled(t, "PutObject", mock.Anything, mock.Anything, mock.Anything)
 }
