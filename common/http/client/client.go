@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	commonmw "github.com/aleksandarv/file-uploader/common/http/middleware"
 	goahttp "goa.design/goa/v3/http"
 	goam "goa.design/goa/v3/middleware"
 )
@@ -24,20 +25,23 @@ func NewDoer(debug bool, tlsConfig *tls.Config) goahttp.Doer {
 	}
 
 	var doer goahttp.Doer = &http.Client{Transport: transport, Timeout: requestTimeout}
-	doer = requestIDDoer{doer}
+	doer = contextHeadersDoer{doer}
 	if debug {
 		doer = goahttp.NewDebugDoer(doer)
 	}
 	return doer
 }
 
-type requestIDDoer struct {
+type contextHeadersDoer struct {
 	goahttp.Doer
 }
 
-func (d requestIDDoer) Do(req *http.Request) (*http.Response, error) {
+func (d contextHeadersDoer) Do(req *http.Request) (*http.Response, error) {
 	if reqID, ok := req.Context().Value(goam.RequestIDKey).(string); ok {
-		req.Header.Set("X-Request-Id", reqID)
+		req.Header.Set(commonmw.RequestIDHeader, reqID)
+	}
+	if username, ok := commonmw.UsernameFromCtx(req.Context()); ok {
+		req.Header.Set(commonmw.UsernameHeader, username)
 	}
 	return d.Doer.Do(req)
 }

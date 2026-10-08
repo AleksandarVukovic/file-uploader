@@ -5,16 +5,12 @@ import (
 	"net/http"
 	"strings"
 
+	commonmw "github.com/aleksandarv/file-uploader/common/http/middleware"
 	"github.com/golang-jwt/jwt/v5"
 )
 
-type ctxKey int
-
-const usernameCtxKey ctxKey = iota
-
 func UsernameFromCtx(ctx context.Context) (string, bool) {
-	username, ok := ctx.Value(usernameCtxKey).(string)
-	return username, ok
+	return commonmw.UsernameFromCtx(ctx)
 }
 
 func JWT(secret []byte) func(next http.Handler) http.Handler {
@@ -42,7 +38,7 @@ func JWT(secret []byte) func(next http.Handler) http.Handler {
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), usernameCtxKey, claims.Subject)
+			ctx := commonmw.WithUsername(r.Context(), claims.Subject)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
