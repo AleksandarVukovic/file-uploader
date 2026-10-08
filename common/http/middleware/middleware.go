@@ -6,22 +6,38 @@ import (
 	"net/http"
 
 	"github.com/aleksandarv/file-uploader/common/logger"
-	goam "goa.design/goa/v3/http/middleware"
 	"goa.design/goa/v3/middleware"
 )
 
-const RequestIDHeader = "X-Request-Id"
+const (
+	RequestIDHeader = "X-Request-Id"
+	UsernameHeader  = "X-Username"
+)
 
-func RequireRequestID() func(http.Handler) http.Handler {
+type ctxKey int
+
+const usernameCtxKey ctxKey = iota
+
+func WithUsername(ctx context.Context, username string) context.Context {
+	return context.WithValue(ctx, usernameCtxKey, username)
+}
+
+func UsernameFromCtx(ctx context.Context) (string, bool) {
+	username, ok := ctx.Value(usernameCtxKey).(string)
+	return username, ok
+}
+
+func RequireContextHeaders() func(http.Handler) http.Handler {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := r.Context()
-			reqID := ctx.Value(goam.RequestXRequestIDKey)
-			if reqID == "" {
-				http.Error(w, "missing "+RequestIDHeader+" header", http.StatusBadRequest)
-				return
+			for _, header := range []string{RequestIDHeader, UsernameHeader} {
+				if r.Header.Get(header) == "" {
+					http.Error(w, "missing "+header+" header", http.StatusBadRequest)
+					return
+				}
 			}
-			ctx = context.WithValue(ctx, middleware.RequestIDKey, reqID)
+			ctx := context.WithValue(r.Context(), middleware.RequestIDKey, r.Header.Get(RequestIDHeader))
+			ctx = WithUsername(ctx, r.Header.Get(UsernameHeader))
 			h.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

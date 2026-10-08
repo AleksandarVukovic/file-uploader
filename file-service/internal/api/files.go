@@ -22,6 +22,8 @@ func (h *filesHandler) Upload(ctx context.Context, p *files.UploadPayload, body 
 	log := logger.FromCtx(ctx)
 	defer body.Close()
 
+	// username, _ := httpmiddleware.UsernameFromCtx(ctx)
+
 	res, err := h.storage.Upload(ctx, storage.UploadInput{
 		Filename:    p.Filename,
 		ContentType: p.ContentType,

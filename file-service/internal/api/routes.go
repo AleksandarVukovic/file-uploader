@@ -19,7 +19,7 @@ func Routes(log *slog.Logger, filesHandler files.Service) http.Handler {
 	filesSrv := filessvr.New(files.NewEndpoints(filesHandler), mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
 	filesSrv.Use(httpmiddleware.PanicHandler())
 	filesSrv.Use(httpmiddleware.Logger(log, true))
-	filesSrv.Use(httpmiddleware.RequireRequestID())
+	filesSrv.Use(httpmiddleware.RequireContextHeaders())
 	filesSrv.Use(middleware.PopulateRequestContext())
 	filesSrv.Mount(mux)
 	for _, m := range filesSrv.Mounts {
