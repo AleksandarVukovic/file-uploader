@@ -39,6 +39,23 @@ var _ = Service("files", func() {
 			Required("filename", "size", "contentType", "checksum")
 		})
 
+		Result(func() {
+			Attribute("uuid", String, "Identifier of the stored file", func() {
+				Format(FormatUUID)
+				Example("0b8e6f1c-3f0a-4a53-9f44-2f6a1d7a8c11")
+			})
+			Attribute("filename", String, "Name of the stored file", func() {
+				Example("users.csv")
+			})
+			Attribute("contentType", String, "MIME type of the stored file", func() {
+				Example("text/csv")
+			})
+			Attribute("size", Int64, "Size of the stored file in bytes", func() {
+				Example(1048576)
+			})
+			Required("uuid", "filename", "contentType", "size")
+		})
+
 		HTTP(func() {
 			POST("/files/upload")
 			SkipRequestBodyEncodeDecode()
@@ -46,7 +63,7 @@ var _ = Service("files", func() {
 			Header("size:Content-Length")
 			Header("contentType:Content-Type")
 			Header("checksum:X-Checksum-Sha256")
-			Response(StatusNoContent)
+			Response(StatusCreated)
 			Response("bad_request", StatusBadRequest)
 			Response("internal_error", StatusInternalServerError)
 		})

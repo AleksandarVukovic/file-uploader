@@ -16,6 +16,7 @@ import (
 	"github.com/aleksandarv/file-uploader/file-service/internal/service/storage"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
@@ -71,7 +72,19 @@ func TestUploadEndpoint_Success(t *testing.T) {
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	var got struct {
+		UUID        string `json:"uuid"`
+		Filename    string `json:"filename"`
+		ContentType string `json:"contentType"`
+		Size        int    `json:"size"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&got))
+	_, err = uuid.Parse(got.UUID)
+	require.NoError(t, err)
+	require.Equal(t, "users.csv", got.Filename)
+	require.Equal(t, "text/csv", got.ContentType)
+	require.Equal(t, len(body), got.Size)
 	m.AssertExpectations(t)
 }
 

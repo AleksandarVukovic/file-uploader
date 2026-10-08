@@ -9,8 +9,22 @@
 package client
 
 import (
+	files "github.com/aleksandarv/file-uploader/file-service/gen/files"
 	goa "goa.design/goa/v3/pkg"
 )
+
+// UploadResponseBody is the type of the "files" service "upload" endpoint HTTP
+// response body.
+type UploadResponseBody struct {
+	// Identifier of the stored file
+	UUID *string `form:"uuid,omitempty" json:"uuid,omitempty" xml:"uuid,omitempty"`
+	// Name of the stored file
+	Filename *string `form:"filename,omitempty" json:"filename,omitempty" xml:"filename,omitempty"`
+	// MIME type of the stored file
+	ContentType *string `form:"contentType,omitempty" json:"contentType,omitempty" xml:"contentType,omitempty"`
+	// Size of the stored file in bytes
+	Size *int64 `form:"size,omitempty" json:"size,omitempty" xml:"size,omitempty"`
+}
 
 // UploadBadRequestResponseBody is the type of the "files" service "upload"
 // endpoint HTTP response body for the "bad_request" error.
@@ -48,6 +62,19 @@ type UploadInternalErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// NewUploadResultCreated builds a "files" service "upload" endpoint result
+// from a HTTP "Created" response.
+func NewUploadResultCreated(body *UploadResponseBody) *files.UploadResult {
+	v := &files.UploadResult{
+		UUID:        *body.UUID,
+		Filename:    *body.Filename,
+		ContentType: *body.ContentType,
+		Size:        *body.Size,
+	}
+
+	return v
+}
+
 // NewUploadBadRequest builds a files service upload endpoint bad_request error.
 func NewUploadBadRequest(body *UploadBadRequestResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
@@ -75,6 +102,26 @@ func NewUploadInternalError(body *UploadInternalErrorResponseBody) *goa.ServiceE
 	}
 
 	return v
+}
+
+// ValidateUploadResponseBody runs the validations defined on UploadResponseBody
+func ValidateUploadResponseBody(body *UploadResponseBody) (err error) {
+	if body.UUID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("uuid", "body"))
+	}
+	if body.Filename == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("filename", "body"))
+	}
+	if body.ContentType == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("contentType", "body"))
+	}
+	if body.Size == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("size", "body"))
+	}
+	if body.UUID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.uuid", *body.UUID, goa.FormatUUID))
+	}
+	return
 }
 
 // ValidateUploadBadRequestResponseBody runs the validations defined on

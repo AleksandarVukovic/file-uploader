@@ -24,8 +24,11 @@ import (
 // upload endpoint.
 func EncodeUploadResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		w.WriteHeader(http.StatusNoContent)
-		return nil
+		res, _ := v.(*files.UploadResult)
+		enc := encoder(ctx, w)
+		body := NewUploadResponseBody(res)
+		w.WriteHeader(http.StatusCreated)
+		return enc.Encode(body)
 	}
 }
 

@@ -96,7 +96,7 @@ func TestFilesHandler_Upload_Success(t *testing.T) {
 		Return(storage.UploadResult{Size: payload.Size}, nil)
 
 	h := NewFilesHandler(m)
-	err := h.Upload(testCtx(), payload, io.NopCloser(strings.NewReader(body)))
+	_, err := h.Upload(testCtx(), payload, io.NopCloser(strings.NewReader(body)))
 
 	require.NoError(t, err)
 	m.AssertExpectations(t)
@@ -109,7 +109,7 @@ func TestFilesHandler_Upload_MapsInvalidChecksumToBadRequest(t *testing.T) {
 	m.On("Upload", mock.Anything, mock.Anything).Return(storage.UploadResult{}, storage.ErrInvalidChecksum)
 
 	h := NewFilesHandler(m)
-	err := h.Upload(testCtx(), uploadPayload(body, "not-hex"), io.NopCloser(strings.NewReader(body)))
+	_, err := h.Upload(testCtx(), uploadPayload(body, "not-hex"), io.NopCloser(strings.NewReader(body)))
 
 	var svcErr *goa.ServiceError
 	require.True(t, errors.As(err, &svcErr))
@@ -125,7 +125,7 @@ func TestFilesHandler_Upload_WrapsStorageErrorAsInternalError(t *testing.T) {
 		Return(storage.UploadResult{}, errors.New("storage unreachable"))
 
 	h := NewFilesHandler(m)
-	err := h.Upload(testCtx(), uploadPayload(body, checksumOf(body)), io.NopCloser(strings.NewReader(body)))
+	_, err := h.Upload(testCtx(), uploadPayload(body, checksumOf(body)), io.NopCloser(strings.NewReader(body)))
 
 	var svcErr *goa.ServiceError
 	require.True(t, errors.As(err, &svcErr))
@@ -144,7 +144,8 @@ func TestFilesHandler_Upload_ClosesBody(t *testing.T) {
 	m.On("Upload", mock.Anything, mock.Anything).Return(storage.UploadResult{}, nil)
 
 	h := NewFilesHandler(m)
-	require.NoError(t, h.Upload(testCtx(), uploadPayload(body, checksumOf(body)), rc))
+	_, err := h.Upload(testCtx(), uploadPayload(body, checksumOf(body)), rc)
+	require.NoError(t, err)
 	rc.AssertExpectations(t)
 }
 
@@ -159,6 +160,7 @@ func TestFilesHandler_Upload_ClosesBodyOnStorageFailure(t *testing.T) {
 		Return(storage.UploadResult{}, errors.New("storage unreachable"))
 
 	h := NewFilesHandler(m)
-	require.Error(t, h.Upload(testCtx(), uploadPayload(body, checksumOf(body)), rc))
+	_, err := h.Upload(testCtx(), uploadPayload(body, checksumOf(body)), rc)
+	require.Error(t, err)
 	rc.AssertExpectations(t)
 }

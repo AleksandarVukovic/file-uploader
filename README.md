@@ -36,7 +36,13 @@ Uploads are streamed rather than buffered, with metadata carried in headers:
 | `Content-Type`          | `contentType`  | Must be `text/csv`                       |
 | `X-Checksum-Sha256`     | `checksum`     | Hex-encoded SHA-256 digest of the body   |
 
-`api-service` validates and caps the body at 10Mb before forwarding it to `file-service`, which verifies the checksum and uploads to S3 via `PutObject`, passing the checksum through for S3-side integrity verification.
+`api-service` validates and caps the body at 10Mb before forwarding it to `file-service`, which verifies the checksum and uploads to S3 via `PutObject`, passing the checksum through for S3-side integrity verification. `file-service` talks to the object store only through the `storage.Service` interface (`file-service/internal/service/storage`; `storage.NewS3` is the S3 implementation), so another backend can be added without touching the handler.
+
+On success the endpoint responds `201 Created` with a JSON body describing the stored file:
+
+```json
+{"uuid": "0b8e6f1c-3f0a-4a53-9f44-2f6a1d7a8c11", "filename": "users.csv", "contentType": "text/csv", "size": 1048576}
+```
 
 ## Authentication
 

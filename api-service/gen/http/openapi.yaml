@@ -53,8 +53,15 @@ paths:
                   minLength: 64
                   pattern: ^[a-f0-9]{64}$
             responses:
-                "204":
-                    description: No Content response.
+                "201":
+                    description: Created response.
+                    schema:
+                        $ref: '#/definitions/FilesUploadResponseBody'
+                        required:
+                            - uuid
+                            - filename
+                            - contentType
+                            - size
                 "400":
                     description: 'bad_request: Invalid request payload.'
                     schema:
@@ -737,6 +744,38 @@ definitions:
             - temporary
             - timeout
             - fault
+    FilesUploadResponseBody:
+        title: FilesUploadResponseBody
+        type: object
+        properties:
+            contentType:
+                type: string
+                description: MIME type of the stored file
+                example: text/csv
+            filename:
+                type: string
+                description: Name of the stored file
+                example: users.csv
+            size:
+                type: integer
+                description: Size of the stored file in bytes
+                example: 1048576
+                format: int64
+            uuid:
+                type: string
+                description: Identifier of the stored file
+                example: 0b8e6f1c-3f0a-4a53-9f44-2f6a1d7a8c11
+                format: uuid
+        example:
+            contentType: text/csv
+            filename: users.csv
+            size: 1048576
+            uuid: 0b8e6f1c-3f0a-4a53-9f44-2f6a1d7a8c11
+        required:
+            - uuid
+            - filename
+            - contentType
+            - size
     HealthHealthInternalErrorResponseBody:
         title: 'Mediatype identifier: application/vnd.goa.error; view=default'
         type: object

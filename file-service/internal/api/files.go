@@ -18,7 +18,7 @@ func NewFilesHandler(storage storage.Service) files.Service {
 	return &filesHandler{storage: storage}
 }
 
-func (h *filesHandler) Upload(ctx context.Context, p *files.UploadPayload, body io.ReadCloser) error {
+func (h *filesHandler) Upload(ctx context.Context, p *files.UploadPayload, body io.ReadCloser) (*files.UploadResult, error) {
 	log := logger.FromCtx(ctx)
 	defer body.Close()
 
@@ -31,13 +31,18 @@ func (h *filesHandler) Upload(ctx context.Context, p *files.UploadPayload, body 
 	})
 	if errors.Is(err, storage.ErrInvalidChecksum) {
 		log.Error("upload rejected: malformed checksum", "filename", p.Filename, "checksum", p.Checksum)
-		return files.MakeBadRequest(errors.New("Checksum must be a hex-encoded SHA-256 digest"))
+		return nil, files.MakeBadRequest(errors.New("Checksum must be a hex-encoded SHA-256 digest"))
 	}
 	if err != nil {
 		log.Error("failed to store file", "err", err, "filename", p.Filename)
-		return files.MakeInternalError(errors.New("Error while storing file"))
+		return nil, files.MakeInternalError(errors.New("Error while storing file"))
 	}
 
 	log.Info("file stored", "uuid", res.UUID, "filename", res.Filename, "contentType", res.ContentType, "checksum", p.Checksum, "size", res.Size)
-	return nil
+	return &files.UploadResult{
+		UUID:        res.UUID,
+		Filename:    res.Filename,
+		ContentType: res.ContentType,
+		Size:        res.Size,
+	}, nil
 }
