@@ -33,7 +33,7 @@ func validToken(t *testing.T, secret []byte) string {
 
 	now := time.Now()
 	claims := jwt.RegisteredClaims{
-		Subject:   "test-user",
+		Subject:   "1",
 		IssuedAt:  jwt.NewNumericDate(now),
 		ExpiresAt: jwt.NewNumericDate(now.Add(time.Minute)),
 	}

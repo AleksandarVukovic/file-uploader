@@ -41,6 +41,7 @@ func newUploadRequest(t *testing.T, baseURL, filename, contentType, checksum, bo
 	req.Header.Set("Content-Type", contentType)
 	req.Header.Set("X-Checksum-Sha256", checksum)
 	req.Header.Set("X-Request-Id", "test-request-id")
+	req.Header.Set("X-User-Id", "1")
 	return req
 }
 

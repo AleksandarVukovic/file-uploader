@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/aleksandarv/file-uploader/api-service/gen/auth"
@@ -45,7 +46,7 @@ func (h *authHandler) Login(ctx context.Context, p *auth.LoginPayload) (*auth.Lo
 
 	now := time.Now()
 	claims := jwt.RegisteredClaims{
-		Subject:   user.Username,
+		Subject:   strconv.FormatInt(user.ID, 10),
 		IssuedAt:  jwt.NewNumericDate(now),
 		ExpiresAt: jwt.NewNumericDate(now.Add(tokenTTL)),
 	}

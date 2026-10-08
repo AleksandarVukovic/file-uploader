@@ -106,14 +106,31 @@ func TestJWT_RejectsInvalidToken(t *testing.T) {
 	}
 }
 
-func TestJWT_AcceptsValidToken_AndPropagatesUsername(t *testing.T) {
+func TestJWT_AcceptsValidToken_AndPropagatesUserID(t *testing.T) {
 	t.Parallel()
 
-	var gotUsername string
+	var gotUserID int64
 	var gotOK bool
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotUsername, gotOK = UsernameFromCtx(r.Context())
+		gotUserID, gotOK = UserIDFromCtx(r.Context())
 		w.WriteHeader(http.StatusOK)
+	})
+
+	token := signToken(t, testSecret, jwt.SigningMethodHS256, time.Minute, "123")
+
+	rec := httptest.NewRecorder()
+	JWT(testSecret)(next).ServeHTTP(rec, newRequestWithAuth("Bearer "+token))
+
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.True(t, gotOK)
+	require.Equal(t, int64(123), gotUserID)
+}
+
+func TestJWT_RejectsNonNumericSubject(t *testing.T) {
+	t.Parallel()
+
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("handler should not run for a non-numeric subject")
 	})
 
 	token := signToken(t, testSecret, jwt.SigningMethodHS256, time.Minute, "admin123")
@@ -121,15 +138,13 @@ func TestJWT_AcceptsValidToken_AndPropagatesUsername(t *testing.T) {
 	rec := httptest.NewRecorder()
 	JWT(testSecret)(next).ServeHTTP(rec, newRequestWithAuth("Bearer "+token))
 
-	require.Equal(t, http.StatusOK, rec.Code)
-	require.True(t, gotOK)
-	require.Equal(t, "admin123", gotUsername)
+	require.Equal(t, http.StatusUnauthorized, rec.Code)
 }
 
-func TestUsernameFromCtx_AbsentWhenNotSet(t *testing.T) {
+func TestUserIDFromCtx_AbsentWhenNotSet(t *testing.T) {
 	t.Parallel()
 
-	username, ok := UsernameFromCtx(t.Context())
+	userID, ok := UserIDFromCtx(t.Context())
 	require.False(t, ok)
-	require.Empty(t, username)
+	require.Zero(t, userID)
 }

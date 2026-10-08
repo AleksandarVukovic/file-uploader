@@ -43,10 +43,10 @@ var _ = Describe("Upload authorization", func() {
 		Entry("with no token", func() string { return "" }),
 		Entry("with a malformed token", func() string { return "not-a-jwt" }),
 		Entry("with a token signed by the wrong secret", func() string {
-			return signedToken(jwt.SigningMethodHS256, "not-the-real-secret", e2eUsername, time.Hour)
+			return signedToken(jwt.SigningMethodHS256, "not-the-real-secret", "1", time.Hour)
 		}),
 		Entry("with a token signed using a disallowed algorithm", func() string {
-			return signedToken(jwt.SigningMethodHS384, e2eJWTSecret, e2eUsername, time.Hour)
+			return signedToken(jwt.SigningMethodHS384, e2eJWTSecret, "1", time.Hour)
 		}),
 		Entry("with an expired token", func() string {
 			return signedToken(jwt.SigningMethodHS256, e2eJWTSecret, e2eUsername, -time.Hour)
@@ -57,7 +57,7 @@ var _ = Describe("Upload authorization", func() {
 		body := loadTestdata("users.csv")
 		checksum := checksumOf(body)
 
-		token := signedToken(jwt.SigningMethodHS256, e2eJWTSecret, e2eUsername, time.Hour)
+		token := signedToken(jwt.SigningMethodHS256, e2eJWTSecret, "1", time.Hour)
 		req, err := newUploadRequest("e2e-upload-auth-control.csv", "text/csv", checksum, body, token)
 		Expect(err).NotTo(HaveOccurred())
 
