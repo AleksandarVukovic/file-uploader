@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"strconv"
 
 	"github.com/aleksandarv/file-uploader/common/logger"
 	"goa.design/goa/v3/middleware"
@@ -11,33 +12,38 @@ import (
 
 const (
 	RequestIDHeader = "X-Request-Id"
-	UsernameHeader  = "X-Username"
+	UserIDHeader    = "X-User-Id"
 )
 
 type ctxKey int
 
-const usernameCtxKey ctxKey = iota
+const userIDCtxKey ctxKey = iota
 
-func WithUsername(ctx context.Context, username string) context.Context {
-	return context.WithValue(ctx, usernameCtxKey, username)
+func WithUserID(ctx context.Context, userID int64) context.Context {
+	return context.WithValue(ctx, userIDCtxKey, userID)
 }
 
-func UsernameFromCtx(ctx context.Context) (string, bool) {
-	username, ok := ctx.Value(usernameCtxKey).(string)
-	return username, ok
+func UserIDFromCtx(ctx context.Context) (int64, bool) {
+	userID, ok := ctx.Value(userIDCtxKey).(int64)
+	return userID, ok
 }
 
 func RequireContextHeaders() func(http.Handler) http.Handler {
 	return func(h http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			for _, header := range []string{RequestIDHeader, UsernameHeader} {
+			for _, header := range []string{RequestIDHeader, UserIDHeader} {
 				if r.Header.Get(header) == "" {
 					http.Error(w, "missing "+header+" header", http.StatusBadRequest)
 					return
 				}
 			}
+			userID, err := strconv.ParseInt(r.Header.Get(UserIDHeader), 10, 64)
+			if err != nil {
+				http.Error(w, "invalid "+UserIDHeader+" header", http.StatusBadRequest)
+				return
+			}
 			ctx := context.WithValue(r.Context(), middleware.RequestIDKey, r.Header.Get(RequestIDHeader))
-			ctx = WithUsername(ctx, r.Header.Get(UsernameHeader))
+			ctx = WithUserID(ctx, userID)
 			h.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

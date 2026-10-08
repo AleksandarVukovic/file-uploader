@@ -31,14 +31,14 @@ func TestNewDoer_SetsTLSClientConfig(t *testing.T) {
 	}
 }
 
-func TestRequestIDDoer_ForwardsUsername(t *testing.T) {
+func TestRequestIDDoer_ForwardsUserID(t *testing.T) {
 	var got string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		got = r.Header.Get(middleware.UsernameHeader)
+		got = r.Header.Get(middleware.UserIDHeader)
 	}))
 	defer srv.Close()
 
-	ctx := middleware.WithUsername(t.Context(), "alice")
+	ctx := middleware.WithUserID(t.Context(), 42)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -49,15 +49,15 @@ func TestRequestIDDoer_ForwardsUsername(t *testing.T) {
 	}
 	resp.Body.Close()
 
-	if got != "alice" {
-		t.Fatalf("expected X-Username alice, got %q", got)
+	if got != "42" {
+		t.Fatalf("expected X-User-Id 42, got %q", got)
 	}
 }
 
-func TestRequestIDDoer_OmitsUsernameWhenAbsent(t *testing.T) {
+func TestRequestIDDoer_OmitsUserIDWhenAbsent(t *testing.T) {
 	var got string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		got = r.Header.Get(middleware.UsernameHeader)
+		got = r.Header.Get(middleware.UserIDHeader)
 	}))
 	defer srv.Close()
 
@@ -72,6 +72,6 @@ func TestRequestIDDoer_OmitsUsernameWhenAbsent(t *testing.T) {
 	resp.Body.Close()
 
 	if got != "" {
-		t.Fatalf("expected no X-Username header, got %q", got)
+		t.Fatalf("expected no X-User-Id header, got %q", got)
 	}
 }

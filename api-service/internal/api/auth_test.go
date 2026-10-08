@@ -53,7 +53,7 @@ func TestAuthHandler_Login_Success(t *testing.T) {
 		return secret, nil
 	}, jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}))
 	require.NoError(t, err)
-	require.Equal(t, testUsername, claims.Subject)
+	require.Equal(t, "1", claims.Subject)
 	require.WithinDuration(t, claims.IssuedAt.Add(tokenTTL), claims.ExpiresAt.Time, 0)
 	users.AssertExpectations(t)
 }

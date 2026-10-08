@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"net"
 	"net/http"
+	"strconv"
 	"time"
 
 	commonmw "github.com/aleksandarv/file-uploader/common/http/middleware"
@@ -40,8 +41,8 @@ func (d contextHeadersDoer) Do(req *http.Request) (*http.Response, error) {
 	if reqID, ok := req.Context().Value(goam.RequestIDKey).(string); ok {
 		req.Header.Set(commonmw.RequestIDHeader, reqID)
 	}
-	if username, ok := commonmw.UsernameFromCtx(req.Context()); ok {
-		req.Header.Set(commonmw.UsernameHeader, username)
+	if userID, ok := commonmw.UserIDFromCtx(req.Context()); ok {
+		req.Header.Set(commonmw.UserIDHeader, strconv.FormatInt(userID, 10))
 	}
 	return d.Doer.Do(req)
 }

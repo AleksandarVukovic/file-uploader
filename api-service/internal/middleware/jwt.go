@@ -3,14 +3,15 @@ package middleware
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"strings"
 
 	commonmw "github.com/aleksandarv/file-uploader/common/http/middleware"
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func UsernameFromCtx(ctx context.Context) (string, bool) {
-	return commonmw.UsernameFromCtx(ctx)
+func UserIDFromCtx(ctx context.Context) (int64, bool) {
+	return commonmw.UserIDFromCtx(ctx)
 }
 
 func JWT(secret []byte) func(next http.Handler) http.Handler {
@@ -38,7 +39,13 @@ func JWT(secret []byte) func(next http.Handler) http.Handler {
 				return
 			}
 
-			ctx := commonmw.WithUsername(r.Context(), claims.Subject)
+			userID, err := strconv.ParseInt(claims.Subject, 10, 64)
+			if err != nil {
+				http.Error(w, "Invalid or expired token", http.StatusUnauthorized)
+				return
+			}
+
+			ctx := commonmw.WithUserID(r.Context(), userID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

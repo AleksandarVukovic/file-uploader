@@ -58,6 +58,7 @@ func newMinimalUploadRequest(t *testing.T, baseURL string, extraHeaders map[stri
 	req.Header.Set("X-File-Size", strconv.Itoa(len(body)))
 	req.Header.Set("Content-Type", "text/csv")
 	req.Header.Set("X-Checksum-Sha256", strings.Repeat("a", 64))
+	req.Header.Set("X-User-Id", "1")
 	for k, v := range extraHeaders {
 		req.Header.Set(k, v)
 	}
