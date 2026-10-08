@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"io"
@@ -14,7 +13,7 @@ import (
 
 	"github.com/aleksandarv/file-uploader/common/logger"
 	"github.com/aleksandarv/file-uploader/file-service/gen/files"
-	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aleksandarv/file-uploader/file-service/internal/service/storage"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -60,87 +59,73 @@ func (m *mockS3PutObjectAPI) PutObject(ctx context.Context, params *s3.PutObject
 	return out, args.Error(1)
 }
 
-func TestFilesHandler_Upload_Success(t *testing.T) {
-	body := "id,name\n1,foo\n"
-	checksum := checksumOf(body)
-	checksumB64 := func() string {
-		raw, err := hex.DecodeString(checksum)
-		require.NoError(t, err)
-		return base64.StdEncoding.EncodeToString(raw)
-	}()
+type mockStorage struct {
+	mock.Mock
+}
 
-	payload := &files.UploadPayload{
+func (m *mockStorage) Upload(ctx context.Context, in storage.UploadInput) (storage.UploadResult, error) {
+	args := m.Called(ctx, in)
+	return args.Get(0).(storage.UploadResult), args.Error(1)
+}
+
+func uploadPayload(body, checksum string) *files.UploadPayload {
+	return &files.UploadPayload{
 		Filename:    "users.csv",
 		Size:        int64(len(body)),
 		ContentType: "text/csv",
 		Checksum:    checksum,
 	}
+}
 
-	m := new(mockS3PutObjectAPI)
-	m.On("PutObject", mock.Anything, mock.MatchedBy(func(in *s3.PutObjectInput) bool {
-		return aws.ToString(in.Bucket) == "test-bucket" &&
-			aws.ToString(in.Key) == payload.Filename &&
-			aws.ToInt64(in.ContentLength) == payload.Size &&
-			aws.ToString(in.ContentType) == payload.ContentType &&
-			aws.ToString(in.ChecksumSHA256) == checksumB64
-	}), mock.Anything).
+func TestFilesHandler_Upload_Success(t *testing.T) {
+	body := "id,name\n1,foo\n"
+	payload := uploadPayload(body, checksumOf(body))
+
+	m := new(mockStorage)
+	m.On("Upload", mock.Anything, mock.MatchedBy(func(in storage.UploadInput) bool {
+		return in.Filename == payload.Filename &&
+			in.Size == payload.Size &&
+			in.ContentType == payload.ContentType &&
+			in.Checksum == payload.Checksum
+	})).
 		Run(func(args mock.Arguments) {
-			in := args.Get(1).(*s3.PutObjectInput)
-			b, err := io.ReadAll(in.Body)
+			b, err := io.ReadAll(args.Get(1).(storage.UploadInput).Body)
 			require.NoError(t, err)
 			require.Equal(t, body, string(b))
 		}).
-		Return(&s3.PutObjectOutput{
-			ChecksumSHA256: aws.String(checksumB64),
-			Size:           aws.Int64(payload.Size),
-		}, nil)
+		Return(storage.UploadResult{Size: payload.Size}, nil)
 
-	h := NewFilesHandler("test-bucket", m)
+	h := NewFilesHandler(m)
 	err := h.Upload(testCtx(), payload, io.NopCloser(strings.NewReader(body)))
 
 	require.NoError(t, err)
 	m.AssertExpectations(t)
 }
 
-func TestFilesHandler_Upload_RejectsMalformedChecksum(t *testing.T) {
+func TestFilesHandler_Upload_MapsInvalidChecksumToBadRequest(t *testing.T) {
 	body := "id,name\n1,foo\n"
-	payload := &files.UploadPayload{
-		Filename:    "users.csv",
-		Size:        int64(len(body)),
-		ContentType: "text/csv",
-		Checksum:    "not-hex",
-	}
 
-	m := new(mockS3PutObjectAPI)
+	m := new(mockStorage)
+	m.On("Upload", mock.Anything, mock.Anything).Return(storage.UploadResult{}, storage.ErrInvalidChecksum)
 
-	h := NewFilesHandler("test-bucket", m)
-	err := h.Upload(testCtx(), payload, io.NopCloser(strings.NewReader(body)))
-
-	require.Error(t, err)
+	h := NewFilesHandler(m)
+	err := h.Upload(testCtx(), uploadPayload(body, "not-hex"), io.NopCloser(strings.NewReader(body)))
 
 	var svcErr *goa.ServiceError
 	require.True(t, errors.As(err, &svcErr))
 	require.Equal(t, "bad_request", svcErr.Name)
-	m.AssertNotCalled(t, "PutObject", mock.Anything, mock.Anything, mock.Anything)
+	m.AssertExpectations(t)
 }
 
-func TestFilesHandler_Upload_WrapsS3ErrorAsInternalError(t *testing.T) {
+func TestFilesHandler_Upload_WrapsStorageErrorAsInternalError(t *testing.T) {
 	body := "id,name\n1,foo\n"
-	payload := &files.UploadPayload{
-		Filename:    "users.csv",
-		Size:        int64(len(body)),
-		ContentType: "text/csv",
-		Checksum:    checksumOf(body),
-	}
 
-	m := new(mockS3PutObjectAPI)
-	m.On("PutObject", mock.Anything, mock.Anything, mock.Anything).
-		Return(nil, errors.New("s3 unreachable"))
+	m := new(mockStorage)
+	m.On("Upload", mock.Anything, mock.Anything).
+		Return(storage.UploadResult{}, errors.New("storage unreachable"))
 
-	h := NewFilesHandler("test-bucket", m)
-	err := h.Upload(testCtx(), payload, io.NopCloser(strings.NewReader(body)))
-
-	require.Error(t, err)
+	h := NewFilesHandler(m)
+	err := h.Upload(testCtx(), uploadPayload(body, checksumOf(body)), io.NopCloser(strings.NewReader(body)))
 
 	var svcErr *goa.ServiceError
 	require.True(t, errors.As(err, &svcErr))
@@ -151,61 +136,29 @@ func TestFilesHandler_Upload_WrapsS3ErrorAsInternalError(t *testing.T) {
 
 func TestFilesHandler_Upload_ClosesBody(t *testing.T) {
 	body := "id,name\n1,foo\n"
-	payload := &files.UploadPayload{
-		Filename:    "users.csv",
-		Size:        int64(len(body)),
-		ContentType: "text/csv",
-		Checksum:    checksumOf(body),
-	}
 
 	rc := &mockReadCloser{Reader: strings.NewReader(body)}
 	rc.On("Close").Return(nil)
 
-	m := new(mockS3PutObjectAPI)
-	m.On("PutObject", mock.Anything, mock.Anything, mock.Anything).
-		Return(&s3.PutObjectOutput{}, nil)
+	m := new(mockStorage)
+	m.On("Upload", mock.Anything, mock.Anything).Return(storage.UploadResult{}, nil)
 
-	h := NewFilesHandler("test-bucket", m)
-	require.NoError(t, h.Upload(testCtx(), payload, rc))
+	h := NewFilesHandler(m)
+	require.NoError(t, h.Upload(testCtx(), uploadPayload(body, checksumOf(body)), rc))
 	rc.AssertExpectations(t)
 }
 
-func TestFilesHandler_Upload_ClosesBodyOnMalformedChecksum(t *testing.T) {
+func TestFilesHandler_Upload_ClosesBodyOnStorageFailure(t *testing.T) {
 	body := "id,name\n1,foo\n"
-	payload := &files.UploadPayload{
-		Filename:    "users.csv",
-		Size:        int64(len(body)),
-		ContentType: "text/csv",
-		Checksum:    "not-hex",
-	}
 
 	rc := &mockReadCloser{Reader: strings.NewReader(body)}
 	rc.On("Close").Return(nil)
 
-	m := new(mockS3PutObjectAPI)
+	m := new(mockStorage)
+	m.On("Upload", mock.Anything, mock.Anything).
+		Return(storage.UploadResult{}, errors.New("storage unreachable"))
 
-	h := NewFilesHandler("test-bucket", m)
-	require.Error(t, h.Upload(testCtx(), payload, rc))
-	rc.AssertExpectations(t)
-}
-
-func TestFilesHandler_Upload_ClosesBodyOnS3Failure(t *testing.T) {
-	body := "id,name\n1,foo\n"
-	payload := &files.UploadPayload{
-		Filename:    "users.csv",
-		Size:        int64(len(body)),
-		ContentType: "text/csv",
-		Checksum:    checksumOf(body),
-	}
-
-	rc := &mockReadCloser{Reader: strings.NewReader(body)}
-	rc.On("Close").Return(nil)
-
-	m := new(mockS3PutObjectAPI)
-	m.On("PutObject", mock.Anything, mock.Anything, mock.Anything).
-		Return(nil, errors.New("s3 unreachable"))
-
-	h := NewFilesHandler("test-bucket", m)
-	require.Error(t, h.Upload(testCtx(), payload, rc))
+	h := NewFilesHandler(m)
+	require.Error(t, h.Upload(testCtx(), uploadPayload(body, checksumOf(body)), rc))
 	rc.AssertExpectations(t)
 }

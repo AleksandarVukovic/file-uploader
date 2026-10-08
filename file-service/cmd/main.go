@@ -16,6 +16,7 @@ import (
 	"github.com/aleksandarv/file-uploader/common/logger"
 	"github.com/aleksandarv/file-uploader/common/tls"
 	"github.com/aleksandarv/file-uploader/file-service/internal/api"
+	"github.com/aleksandarv/file-uploader/file-service/internal/service/storage"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	awsc "github.com/aws/aws-sdk-go-v2/config"
@@ -69,7 +70,7 @@ func run() error {
 		}
 	})
 
-	filesService := api.NewFilesHandler(s3BucketName, s3Client)
+	filesService := api.NewFilesHandler(storage.NewS3(s3BucketName, s3Client))
 
 	tlsCfg, err := tls.NewServerConfig(tlsCertFile, tlsKeyFile, tlsCACertFile)
 	if err != nil {
