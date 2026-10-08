@@ -5,6 +5,7 @@ package integration
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -43,7 +44,7 @@ var _ = Describe("Upload", func() {
 
 		out, err := s3Client.GetObject(context.Background(), &s3.GetObjectInput{
 			Bucket: aws.String(e2eS3Bucket),
-			Key:    aws.String("e2e-upload.csv"),
+			Key:    aws.String(fmt.Sprintf("%d/%s", e2eUserID, uploaded.UUID)),
 		})
 		Expect(err).NotTo(HaveOccurred())
 		defer out.Body.Close()

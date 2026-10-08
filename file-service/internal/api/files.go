@@ -5,9 +5,11 @@ import (
 	"errors"
 	"io"
 
+	httpmiddleware "github.com/aleksandarv/file-uploader/common/http/middleware"
 	"github.com/aleksandarv/file-uploader/common/logger"
 	"github.com/aleksandarv/file-uploader/file-service/gen/files"
 	"github.com/aleksandarv/file-uploader/file-service/internal/service/storage"
+	"github.com/google/uuid"
 )
 
 type filesHandler struct {
@@ -22,9 +24,15 @@ func (h *filesHandler) Upload(ctx context.Context, p *files.UploadPayload, body 
 	log := logger.FromCtx(ctx)
 	defer body.Close()
 
-	// username, _ := httpmiddleware.UsernameFromCtx(ctx)
+	userID, ok := httpmiddleware.UserIDFromCtx(ctx)
+	if !ok {
+		log.Error("upload rejected: missing user ID")
+		return nil, files.MakeBadRequest(errors.New("User ID is required"))
+	}
 
 	res, err := h.storage.Upload(ctx, storage.UploadInput{
+		UserID:      userID,
+		UUID:        uuid.NewString(),
 		Filename:    p.Filename,
 		ContentType: p.ContentType,
 		Size:        p.Size,

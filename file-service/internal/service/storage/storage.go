@@ -9,6 +9,8 @@ import (
 var ErrInvalidChecksum = errors.New("checksum must be a hex-encoded SHA-256 digest")
 
 type UploadInput struct {
+	UserID      int64
+	UUID        string
 	Filename    string
 	ContentType string
 	Size        int64

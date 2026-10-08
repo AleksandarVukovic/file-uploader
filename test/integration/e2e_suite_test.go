@@ -4,6 +4,7 @@ package integration
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -32,6 +33,7 @@ var (
 	composeStack tccompose.ComposeStack
 	apiBaseURL   string
 	s3Client     *s3.Client
+	e2eUserID    int64
 )
 
 func TestE2E(t *testing.T) {
@@ -101,6 +103,13 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	defer resp.Body.Close()
 	Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+
+	var registered struct {
+		ID int64 `json:"id"`
+	}
+	Expect(json.NewDecoder(resp.Body).Decode(&registered)).To(Succeed())
+	Expect(registered.ID).NotTo(BeZero())
+	e2eUserID = registered.ID
 })
 
 var _ = AfterSuite(func() {

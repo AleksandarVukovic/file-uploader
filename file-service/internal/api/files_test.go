@@ -11,17 +11,22 @@ import (
 	"strings"
 	"testing"
 
+	httpmiddleware "github.com/aleksandarv/file-uploader/common/http/middleware"
 	"github.com/aleksandarv/file-uploader/common/logger"
 	"github.com/aleksandarv/file-uploader/file-service/gen/files"
 	"github.com/aleksandarv/file-uploader/file-service/internal/service/storage"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	goa "goa.design/goa/v3/pkg"
 )
 
+const testUserID int64 = 7
+
 func testCtx() context.Context {
-	return logger.WithCtx(context.Background(), logger.NewLogger(false))
+	ctx := logger.WithCtx(context.Background(), logger.NewLogger(false))
+	return httpmiddleware.WithUserID(ctx, testUserID)
 }
 
 func checksumOf(body string) string {
@@ -83,7 +88,10 @@ func TestFilesHandler_Upload_Success(t *testing.T) {
 
 	m := new(mockStorage)
 	m.On("Upload", mock.Anything, mock.MatchedBy(func(in storage.UploadInput) bool {
-		return in.Filename == payload.Filename &&
+		_, uuidErr := uuid.Parse(in.UUID)
+		return in.UserID == testUserID &&
+			uuidErr == nil &&
+			in.Filename == payload.Filename &&
 			in.Size == payload.Size &&
 			in.ContentType == payload.ContentType &&
 			in.Checksum == payload.Checksum
