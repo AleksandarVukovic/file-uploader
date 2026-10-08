@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/aleksandarv/file-uploader/common/logger"
+	"github.com/aleksandarv/file-uploader/file-service/internal/objectstore"
 	"github.com/aleksandarv/file-uploader/file-service/internal/service/storage"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -24,7 +25,7 @@ import (
 func newFileServiceServer(t *testing.T, s3API *mockS3PutObjectAPI) *httptest.Server {
 	t.Helper()
 
-	filesHandler := NewFilesHandler(storage.NewS3("test-bucket", s3API))
+	filesHandler := NewFilesHandler(storage.New(objectstore.NewS3("test-bucket", s3API)))
 	handler := Routes(logger.NewLogger(false), filesHandler)
 
 	return httptest.NewServer(handler)

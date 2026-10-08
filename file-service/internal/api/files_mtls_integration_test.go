@@ -14,6 +14,7 @@ import (
 
 	"github.com/aleksandarv/file-uploader/common/logger"
 	commontls "github.com/aleksandarv/file-uploader/common/tls"
+	"github.com/aleksandarv/file-uploader/file-service/internal/objectstore"
 	"github.com/aleksandarv/file-uploader/file-service/internal/service/storage"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/google/uuid"
@@ -41,7 +42,7 @@ func newMTLSFileServiceServer(t *testing.T, s3API *mockS3PutObjectAPI) *httptest
 	)
 	require.NoError(t, err)
 
-	handler := Routes(logger.NewLogger(false), NewFilesHandler(storage.NewS3("test-bucket", s3API)))
+	handler := Routes(logger.NewLogger(false), NewFilesHandler(storage.New(objectstore.NewS3("test-bucket", s3API))))
 
 	srv := httptest.NewUnstartedServer(handler)
 	srv.TLS = tlsCfg

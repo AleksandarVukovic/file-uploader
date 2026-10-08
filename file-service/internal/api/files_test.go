@@ -16,7 +16,6 @@ import (
 	"github.com/aleksandarv/file-uploader/file-service/gen/files"
 	"github.com/aleksandarv/file-uploader/file-service/internal/service/storage"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	goa "goa.design/goa/v3/pkg"
@@ -68,9 +67,9 @@ type mockStorage struct {
 	mock.Mock
 }
 
-func (m *mockStorage) Upload(ctx context.Context, in storage.UploadInput) (storage.UploadResult, error) {
+func (m *mockStorage) Store(ctx context.Context, in storage.StoreInput) (storage.StoreResult, error) {
 	args := m.Called(ctx, in)
-	return args.Get(0).(storage.UploadResult), args.Error(1)
+	return args.Get(0).(storage.StoreResult), args.Error(1)
 }
 
 func uploadPayload(body, checksum string) *files.UploadPayload {
@@ -87,21 +86,19 @@ func TestFilesHandler_Upload_Success(t *testing.T) {
 	payload := uploadPayload(body, checksumOf(body))
 
 	m := new(mockStorage)
-	m.On("Upload", mock.Anything, mock.MatchedBy(func(in storage.UploadInput) bool {
-		_, uuidErr := uuid.Parse(in.UUID)
+	m.On("Store", mock.Anything, mock.MatchedBy(func(in storage.StoreInput) bool {
 		return in.UserID == testUserID &&
-			uuidErr == nil &&
 			in.Filename == payload.Filename &&
 			in.Size == payload.Size &&
 			in.ContentType == payload.ContentType &&
 			in.Checksum == payload.Checksum
 	})).
 		Run(func(args mock.Arguments) {
-			b, err := io.ReadAll(args.Get(1).(storage.UploadInput).Body)
+			b, err := io.ReadAll(args.Get(1).(storage.StoreInput).Body)
 			require.NoError(t, err)
 			require.Equal(t, body, string(b))
 		}).
-		Return(storage.UploadResult{Size: payload.Size}, nil)
+		Return(storage.StoreResult{Size: payload.Size}, nil)
 
 	h := NewFilesHandler(m)
 	_, err := h.Upload(testCtx(), payload, io.NopCloser(strings.NewReader(body)))
@@ -114,7 +111,7 @@ func TestFilesHandler_Upload_MapsInvalidChecksumToBadRequest(t *testing.T) {
 	body := "id,name\n1,foo\n"
 
 	m := new(mockStorage)
-	m.On("Upload", mock.Anything, mock.Anything).Return(storage.UploadResult{}, storage.ErrInvalidChecksum)
+	m.On("Store", mock.Anything, mock.Anything).Return(storage.StoreResult{}, storage.ErrInvalidChecksum)
 
 	h := NewFilesHandler(m)
 	_, err := h.Upload(testCtx(), uploadPayload(body, "not-hex"), io.NopCloser(strings.NewReader(body)))
@@ -129,8 +126,8 @@ func TestFilesHandler_Upload_WrapsStorageErrorAsInternalError(t *testing.T) {
 	body := "id,name\n1,foo\n"
 
 	m := new(mockStorage)
-	m.On("Upload", mock.Anything, mock.Anything).
-		Return(storage.UploadResult{}, errors.New("storage unreachable"))
+	m.On("Store", mock.Anything, mock.Anything).
+		Return(storage.StoreResult{}, errors.New("storage unreachable"))
 
 	h := NewFilesHandler(m)
 	_, err := h.Upload(testCtx(), uploadPayload(body, checksumOf(body)), io.NopCloser(strings.NewReader(body)))
@@ -149,7 +146,7 @@ func TestFilesHandler_Upload_ClosesBody(t *testing.T) {
 	rc.On("Close").Return(nil)
 
 	m := new(mockStorage)
-	m.On("Upload", mock.Anything, mock.Anything).Return(storage.UploadResult{}, nil)
+	m.On("Store", mock.Anything, mock.Anything).Return(storage.StoreResult{}, nil)
 
 	h := NewFilesHandler(m)
 	_, err := h.Upload(testCtx(), uploadPayload(body, checksumOf(body)), rc)
@@ -164,8 +161,8 @@ func TestFilesHandler_Upload_ClosesBodyOnStorageFailure(t *testing.T) {
 	rc.On("Close").Return(nil)
 
 	m := new(mockStorage)
-	m.On("Upload", mock.Anything, mock.Anything).
-		Return(storage.UploadResult{}, errors.New("storage unreachable"))
+	m.On("Store", mock.Anything, mock.Anything).
+		Return(storage.StoreResult{}, errors.New("storage unreachable"))
 
 	h := NewFilesHandler(m)
 	_, err := h.Upload(testCtx(), uploadPayload(body, checksumOf(body)), rc)
