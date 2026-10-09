@@ -41,7 +41,14 @@ openssl x509 -req -in user-db.csr -CA ca.pem -CAkey ca-key.pem -CAcreateserial \
   -out user-db.pem -days "$DAYS" -sha256 \
   -extfile <(printf "subjectAltName=DNS:user-db,DNS:localhost\nextendedKeyUsage=serverAuth")
 
-rm -f file-service.csr user-service.csr api-service.csr user-db.csr ca.srl
-chmod 644 ca.pem user-db.pem user-db-key.pem file-service.pem file-service-key.pem user-service.pem user-service-key.pem api-service.pem api-service-key.pem
+echo "Generating file-db server certificate..."
+openssl genrsa -out file-db-key.pem 2048
+openssl req -new -key file-db-key.pem -subj "/CN=file-db" -out file-db.csr
+openssl x509 -req -in file-db.csr -CA ca.pem -CAkey ca-key.pem -CAcreateserial \
+  -out file-db.pem -days "$DAYS" -sha256 \
+  -extfile <(printf "subjectAltName=DNS:file-db,DNS:localhost\nextendedKeyUsage=serverAuth")
+
+rm -f file-service.csr user-service.csr api-service.csr user-db.csr file-db.csr ca.srl
+chmod 644 ca.pem user-db.pem user-db-key.pem file-db.pem file-db-key.pem file-service.pem file-service-key.pem user-service.pem user-service-key.pem api-service.pem api-service-key.pem
 
 echo "Done. Certs written to $CERTS_DIR"

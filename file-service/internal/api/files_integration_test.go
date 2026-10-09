@@ -3,6 +3,7 @@
 package api
 
 import (
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -25,7 +26,13 @@ import (
 func newFileServiceServer(t *testing.T, s3API *mockS3PutObjectAPI) *httptest.Server {
 	t.Helper()
 
-	filesHandler := NewFilesHandler(storage.New(objectstore.NewS3("test-bucket", s3API)))
+	return newFileServiceServerWithRepo(t, s3API, newAcceptingRepository())
+}
+
+func newFileServiceServerWithRepo(t *testing.T, s3API *mockS3PutObjectAPI, repo storage.Repository) *httptest.Server {
+	t.Helper()
+
+	filesHandler := NewFilesHandler(storage.New(objectstore.NewS3("test-bucket", s3API), repo, "test-bucket"))
 	handler := Routes(logger.NewLogger(false), filesHandler)
 
 	return httptest.NewServer(handler)
@@ -67,7 +74,13 @@ func TestUploadEndpoint_Success(t *testing.T) {
 		}).
 		Return(&s3.PutObjectOutput{}, nil)
 
-	srv := newFileServiceServer(t, m)
+	var gotFile storage.File
+	repo := new(mockRepository)
+	repo.On("Insert", mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) { gotFile = args.Get(1).(storage.File) }).
+		Return(storage.File{}, nil)
+
+	srv := newFileServiceServerWithRepo(t, m, repo)
 	defer srv.Close()
 
 	req := newUploadRequest(t, srv.URL, "users.csv", "text/csv", checksum, body)
@@ -89,7 +102,41 @@ func TestUploadEndpoint_Success(t *testing.T) {
 	require.Equal(t, "users.csv", got.Filename)
 	require.Equal(t, "text/csv", got.ContentType)
 	require.Equal(t, len(body), got.Size)
+	require.Equal(t, storage.File{
+		ID:             got.UUID,
+		UserID:         1,
+		Filename:       "users.csv",
+		ContentType:    "text/csv",
+		Path:           gotKey,
+		RootDir:        "test-bucket",
+		Size:           int64(len(body)),
+		ChecksumSHA256: mustDecodeHex(t, checksum),
+	}, gotFile)
 	m.AssertExpectations(t)
+	repo.AssertExpectations(t)
+}
+
+func TestUploadEndpoint_DatabaseFailureMapsToInternalError(t *testing.T) {
+	t.Parallel()
+
+	body := loadTestdata(t, "users.csv")
+	checksum := checksumOf(body)
+
+	m := new(mockS3PutObjectAPI)
+	m.On("PutObject", mock.Anything, mock.Anything, mock.Anything).Return(&s3.PutObjectOutput{}, nil)
+	repo := new(mockRepository)
+	repo.On("Insert", mock.Anything, mock.Anything).Return(storage.File{}, errors.New("db down"))
+
+	srv := newFileServiceServerWithRepo(t, m, repo)
+	defer srv.Close()
+
+	req := newUploadRequest(t, srv.URL, "users.csv", "text/csv", checksum, body)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	repo.AssertExpectations(t)
 }
 
 func TestUploadEndpoint_S3FailureMapsToInternalError(t *testing.T) {
@@ -101,8 +148,9 @@ func TestUploadEndpoint_S3FailureMapsToInternalError(t *testing.T) {
 	m := new(mockS3PutObjectAPI)
 	m.On("PutObject", mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, errors.New("s3 unreachable"))
+	repo := new(mockRepository)
 
-	srv := newFileServiceServer(t, m)
+	srv := newFileServiceServerWithRepo(t, m, repo)
 	defer srv.Close()
 
 	req := newUploadRequest(t, srv.URL, "users.csv", "text/csv", checksum, body)
@@ -111,6 +159,15 @@ func TestUploadEndpoint_S3FailureMapsToInternalError(t *testing.T) {
 	defer resp.Body.Close()
 
 	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	repo.AssertNotCalled(t, "Insert", mock.Anything, mock.Anything)
+}
+
+func mustDecodeHex(t *testing.T, s string) []byte {
+	t.Helper()
+
+	b, err := hex.DecodeString(s)
+	require.NoError(t, err)
+	return b
 }
 
 func TestUploadEndpoint_RejectsOversizedDeclaredSize(t *testing.T) {

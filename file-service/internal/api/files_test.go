@@ -63,6 +63,21 @@ func (m *mockS3PutObjectAPI) PutObject(ctx context.Context, params *s3.PutObject
 	return out, args.Error(1)
 }
 
+type mockRepository struct {
+	mock.Mock
+}
+
+func (m *mockRepository) Insert(ctx context.Context, file storage.File) (storage.File, error) {
+	args := m.Called(ctx, file)
+	return args.Get(0).(storage.File), args.Error(1)
+}
+
+func newAcceptingRepository() *mockRepository {
+	repo := new(mockRepository)
+	repo.On("Insert", mock.Anything, mock.Anything).Return(storage.File{}, nil)
+	return repo
+}
+
 type mockStorage struct {
 	mock.Mock
 }

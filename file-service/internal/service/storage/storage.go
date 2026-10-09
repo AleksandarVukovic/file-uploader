@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -26,6 +27,7 @@ type StoreResult struct {
 	Filename    string
 	ContentType string
 	Size        int64
+	CreatedAt   time.Time
 }
 
 type Service interface {
@@ -44,12 +46,31 @@ type ObjectStore interface {
 	Put(ctx context.Context, in PutInput) error
 }
 
-type service struct {
-	objectStore ObjectStore
+type File struct {
+	ID             string // UUID
+	UserID         int64
+	Filename       string
+	ContentType    string
+	Path           string
+	RootDir        string
+	Size           int64
+	ChecksumSHA256 []byte
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
 }
 
-func New(objectStore ObjectStore) Service {
-	return &service{objectStore: objectStore}
+type Repository interface {
+	Insert(ctx context.Context, file File) (File, error)
+}
+
+type service struct {
+	objectStore ObjectStore
+	repo        Repository
+	rootDir     string
+}
+
+func New(objectStore ObjectStore, repo Repository, rootDir string) Service {
+	return &service{objectStore: objectStore, repo: repo, rootDir: rootDir}
 }
 
 func (s *service) Store(ctx context.Context, in StoreInput) (StoreResult, error) {
@@ -72,10 +93,25 @@ func (s *service) Store(ctx context.Context, in StoreInput) (StoreResult, error)
 		return StoreResult{}, err
 	}
 
+	file, err := s.repo.Insert(ctx, File{
+		ID:             id,
+		UserID:         in.UserID,
+		Filename:       in.Filename,
+		ContentType:    in.ContentType,
+		Path:           key,
+		RootDir:        s.rootDir,
+		Size:           in.Size,
+		ChecksumSHA256: checksum,
+	})
+	if err != nil {
+		return StoreResult{}, err
+	}
+
 	return StoreResult{
 		UUID:        id,
 		Filename:    in.Filename,
 		ContentType: in.ContentType,
 		Size:        in.Size,
+		CreatedAt:   file.CreatedAt,
 	}, nil
 }

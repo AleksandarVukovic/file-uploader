@@ -58,6 +58,52 @@ services:
       user-db:
         condition: service_healthy
 
+  file-db:
+    image: postgres:17-alpine
+    command:
+      - sh
+      - -c
+      - >-
+        cp /certs/file-db.pem /var/lib/postgresql/server.crt &&
+        cp /certs/file-db-key.pem /var/lib/postgresql/server.key &&
+        chown postgres:postgres /var/lib/postgresql/server.crt /var/lib/postgresql/server.key &&
+        chmod 600 /var/lib/postgresql/server.key &&
+        exec docker-entrypoint.sh postgres
+        -c ssl=on
+        -c ssl_cert_file=/var/lib/postgresql/server.crt
+        -c ssl_key_file=/var/lib/postgresql/server.key
+        -c hba_file=/etc/postgresql/pg_hba.conf
+    environment:
+      POSTGRES_USER: e2e_file_service
+      POSTGRES_PASSWORD: e2e_file_service
+      POSTGRES_DB: files
+    volumes:
+      - ../../certs:/certs:ro
+      - ../../file-service/db/pg_hba.local.conf:/etc/postgresql/pg_hba.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  file-db-migrate:
+    image: golang:1.26.8
+    command:
+      - go
+      - run
+      - github.com/pressly/goose/v3/cmd/goose@v3.27.2
+      - -dir
+      - /migrations
+      - postgres
+      - postgres://e2e_file_service:e2e_file_service@file-db:5432/files?sslmode=verify-full&sslrootcert=/certs/ca.pem
+      - up
+    volumes:
+      - ../../file-service/db/migrations:/migrations:ro
+      - ../../certs:/certs:ro
+    depends_on:
+      file-db:
+        condition: service_healthy
+
   user-service:
     build:
       context: ../..
@@ -93,6 +139,7 @@ services:
       AWS_ACCESS_KEY_ID: test
       AWS_SECRET_ACCESS_KEY: test
       AWS_REGION: us-east-1
+      DATABASE_URL: postgres://e2e_file_service:e2e_file_service@file-db:5432/files?sslmode=verify-full&sslrootcert=/certs/ca.pem
       TLS_CERT_FILE: /certs/file-service.pem
       TLS_KEY_FILE: /certs/file-service-key.pem
       TLS_CA_CERT_FILE: /certs/ca.pem
@@ -101,6 +148,8 @@ services:
     depends_on:
       localstack:
         condition: service_healthy
+      file-db-migrate:
+        condition: service_completed_successfully
 
   api-service:
     build:

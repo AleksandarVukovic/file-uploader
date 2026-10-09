@@ -47,6 +47,7 @@ var _ = BeforeSuite(func() {
 		"file-service.pem", "file-service-key.pem",
 		"user-service.pem", "user-service-key.pem",
 		"user-db.pem", "user-db-key.pem",
+		"file-db.pem", "file-db-key.pem",
 		"ca.pem",
 	} {
 		_, err := os.Stat(filepath.Join("..", "..", "certs", name))
