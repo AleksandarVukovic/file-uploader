@@ -15,6 +15,7 @@ COPY ./user-service/Makefile ./app/user-service/Makefile
 # copy only what we need from root folder
 COPY ./common ./app/common
 COPY ./common.mk ./app/common.mk
+COPY ./db.mk ./app/db.mk
 COPY ./go.mod ./go.sum ./app/
 
 # build app by running make command from root folder

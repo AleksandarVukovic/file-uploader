@@ -133,7 +133,7 @@ Run from a single service directory (or `make -C <service> <target>` from the ro
 | `make docker-build`| Build the Docker image                                       |
 | `make docker-push` | Build and push the Docker image                              |
 
-`user-service`'s own `Makefile` adds `migrate-status`, `migrate-up`, `migrate-down` and `migrate-create NAME=<name>` (goose, configured through `GOOSE_*` env vars), `sqlc-generate` (regenerates `internal/repository/gen` from `db/`), and `protoc-gen-go`/`protoc-gen-go-grpc` (install the protobuf plugins `make generate` needs; make sure `$(go env GOPATH)/bin` is on your `PATH`).
+`user-service` and `file-service` (the services with a database) include the shared `db.mk`, which adds `migrate-status`, `migrate-up`, `migrate-down` and `migrate-create NAME=<name>` (goose, configured through `GOOSE_*` env vars) and `sqlc-generate` (regenerates `internal/repository/gen` from `db/`); `user-service`'s own `Makefile` also adds `protoc-gen-go`/`protoc-gen-go-grpc` (install the protobuf plugins `make generate` needs; make sure `$(go env GOPATH)/bin` is on your `PATH`).
 
 The image name and tag can be overridden:
 
