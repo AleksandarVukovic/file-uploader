@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"net/http"
@@ -10,11 +9,11 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
-	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/aleksandarv/file-uploader/common/db"
 	"github.com/aleksandarv/file-uploader/common/logger"
 	"github.com/aleksandarv/file-uploader/common/tls"
 	"github.com/aleksandarv/file-uploader/file-service/internal/api"
@@ -62,7 +61,7 @@ func run() error {
 	log.Info("starting application")
 
 	dbURL := os.Getenv("DATABASE_URL")
-	if err := validateDatabaseURL(dbURL); err != nil {
+	if err := db.ValidateURL(dbURL); err != nil {
 		log.Error("invalid DATABASE_URL", "err", err)
 		return err
 	}
@@ -165,36 +164,6 @@ func run() error {
 	cancel()
 	wg.Wait()
 	return err
-}
-
-func validateDatabaseURL(raw string) error {
-	if raw == "" {
-		return errors.New("DATABASE_URL is required")
-	}
-
-	u, err := url.Parse(raw)
-	if err != nil {
-		return errors.New("not a valid URL")
-	}
-	if u.Scheme != "postgres" && u.Scheme != "postgresql" {
-		return fmt.Errorf("scheme must be postgres or postgresql, got %q", u.Scheme)
-	}
-	if u.User.Username() == "" {
-		return errors.New("user is missing")
-	}
-	if _, ok := u.User.Password(); !ok {
-		return errors.New("password is missing")
-	}
-	if u.Hostname() == "" {
-		return errors.New("host is missing")
-	}
-	if strings.Trim(u.Path, "/") == "" {
-		return errors.New("database name is missing")
-	}
-	if mode := u.Query().Get("sslmode"); mode != "verify-full" {
-		return fmt.Errorf("sslmode must be verify-full, got %q", mode)
-	}
-	return nil
 }
 
 func isPlainHTTP(endpoint string) bool {
