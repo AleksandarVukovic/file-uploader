@@ -92,6 +92,15 @@ func run() error {
 		}
 	})
 
+	// ping the S3 bucket to ensure that it's reachable
+	pingCtx, pingCancel := context.WithTimeout(ctx, 10*time.Second)
+	_, err = s3Client.HeadBucket(pingCtx, &s3.HeadBucketInput{Bucket: aws.String(s3BucketName)})
+	pingCancel()
+	if err != nil {
+		log.Error("failed to reach S3 bucket", "bucket", s3BucketName, "err", err)
+		return err
+	}
+
 	filesRepo := filesrepo.New(sqlc.New(pool))
 	filesService := api.NewFilesHandler(storage.New(objectstore.NewS3(s3BucketName, s3Client), filesRepo, s3BucketName))
 
