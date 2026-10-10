@@ -3,11 +3,14 @@ package objectstore
 import (
 	"context"
 	"encoding/base64"
+	"errors"
+	"fmt"
 
 	"github.com/aleksandarv/file-uploader/common/aws/s3"
 	"github.com/aleksandarv/file-uploader/file-service/internal/service/storage"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awss3 "github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/smithy-go"
 )
 
 type s3Client struct {
@@ -30,5 +33,17 @@ func (s *s3Client) Put(ctx context.Context, in storage.PutInput) error {
 		ContentType:    aws.String(in.ContentType),
 		ChecksumSHA256: aws.String(checksumSHA256),
 	})
-	return err
+	if err != nil {
+		var apiErr smithy.APIError
+		if errors.As(err, &apiErr) {
+			switch apiErr.ErrorCode() {
+			case "BadDigest":
+				return fmt.Errorf("put object %q: %w", in.Key, storage.ErrChecksumMismatch)
+			case "IncompleteBody":
+				return fmt.Errorf("put object %q: %w", in.Key, storage.ErrIncompleteBody)
+			}
+		}
+		return fmt.Errorf("put object %q: %w", in.Key, err)
+	}
+	return nil
 }
