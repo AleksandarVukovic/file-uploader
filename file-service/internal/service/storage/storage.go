@@ -11,7 +11,11 @@ import (
 	"github.com/google/uuid"
 )
 
-var ErrInvalidChecksum = errors.New("checksum must be a hex-encoded SHA-256 digest")
+var (
+	ErrInvalidChecksum  = errors.New("checksum must be a hex-encoded SHA-256 digest")
+	ErrChecksumMismatch = errors.New("checksum does not match the uploaded content")
+	ErrIncompleteBody   = errors.New("uploaded content is shorter than the declared size")
+)
 
 type StoreInput struct {
 	UserID      int64

@@ -41,6 +41,14 @@ func (h *filesHandler) Upload(ctx context.Context, p *files.UploadPayload, body 
 		log.Error("upload rejected: malformed checksum", "filename", p.Filename, "checksum", p.Checksum)
 		return nil, files.MakeBadRequest(errors.New("Checksum must be a hex-encoded SHA-256 digest"))
 	}
+	if errors.Is(err, storage.ErrChecksumMismatch) {
+		log.Error("upload rejected: checksum mismatch", "err", err, "filename", p.Filename, "checksum", p.Checksum)
+		return nil, files.MakeBadRequest(errors.New("Checksum does not match the uploaded content"))
+	}
+	if errors.Is(err, storage.ErrIncompleteBody) {
+		log.Error("upload rejected: incomplete body", "err", err, "filename", p.Filename, "size", p.Size)
+		return nil, files.MakeBadRequest(errors.New("Uploaded content is shorter than the declared size"))
+	}
 	if err != nil {
 		log.Error("failed to store file", "err", err, "filename", p.Filename)
 		return nil, files.MakeInternalError(errors.New("Error while storing file"))
