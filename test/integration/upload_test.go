@@ -18,7 +18,7 @@ import (
 var _ = Describe("Upload", func() {
 	It("stores the uploaded file in S3 through the full api-service -> file-service -> S3 path", func() {
 		token := mustLoginToken()
-		body := loadTestdata("users.csv")
+		body := uniqueTestdata("users.csv")
 		checksum := checksumOf(body)
 
 		req, err := newUploadRequest("e2e-upload.csv", "text/csv", checksum, body, token)
@@ -52,5 +52,27 @@ var _ = Describe("Upload", func() {
 		stored, err := io.ReadAll(out.Body)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(string(stored)).To(Equal(body))
+	})
+
+	It("rejects a second upload of the same content by the same user with 409", func() {
+		token := mustLoginToken()
+		body := uniqueTestdata("users.csv")
+		checksum := checksumOf(body)
+
+		upload := func(filename string) *http.Response {
+			req, err := newUploadRequest(filename, "text/csv", checksum, body, token)
+			Expect(err).NotTo(HaveOccurred())
+			resp, err := http.DefaultClient.Do(req)
+			Expect(err).NotTo(HaveOccurred())
+			return resp
+		}
+
+		first := upload("e2e-duplicate-first.csv")
+		defer first.Body.Close()
+		Expect(first.StatusCode).To(Equal(http.StatusCreated))
+
+		second := upload("e2e-duplicate-second.csv")
+		defer second.Body.Close()
+		Expect(second.StatusCode).To(Equal(http.StatusConflict))
 	})
 })

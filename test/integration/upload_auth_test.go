@@ -54,7 +54,7 @@ var _ = Describe("Upload authorization", func() {
 	)
 
 	It("accepts a correctly signed, non-expired token (control for the rejection cases above)", func() {
-		body := loadTestdata("users.csv")
+		body := uniqueTestdata("users.csv")
 		checksum := checksumOf(body)
 
 		token := signedToken(jwt.SigningMethodHS256, e2eJWTSecret, "1", time.Hour)
