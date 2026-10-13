@@ -36,7 +36,13 @@ Uploads are streamed rather than buffered, with metadata carried in headers:
 | `Content-Type`          | `contentType`  | Must be `text/csv`                       |
 | `X-Checksum-Sha256`     | `checksum`     | Hex-encoded SHA-256 digest of the body   |
 
-`api-service` validates and caps the body at 10Mb before forwarding it to `file-service`, which verifies the checksum and uploads to S3 via `PutObject` under the key `<userID>/<uuid>` (the UUID returned in the response), passing the checksum through for S3-side integrity verification, and then records the file's metadata (owner, original filename, content type, size, checksum, S3 location) in its own PostgreSQL database (`file-db`). `file-service` is layered handler → `storage` service → object store / repository: the handler handles HTTP, the `storage` service (`file-service/internal/service/storage`) validates the checksum, assigns the UUID, builds the key and inserts the metadata row through the `storage.Repository` interface (`file-service/internal/repository/files`, sqlc over pgx), and the object store is only reached through the `storage.ObjectStore` interface, which the `storage` service declares and `file-service/internal/objectstore` implements (`objectstore.NewS3` is the S3 implementation), so another backend can be added without touching the handler or the service.
+`api-service` validates and caps the body at 10Mb before forwarding it to `file-service`, which validates the checksum, assigns the UUID and records the file's metadata (owner, original filename, content type, size, checksum, S3 location, status) in its own PostgreSQL database (`file-db`) *before* uploading. The row starts as `pending`; `file-service` then uploads to S3 via `PutObject` under the key `<userID>/<uuid>` (the UUID returned in the response), passing the checksum through for S3-side integrity verification, and marks the row `uploaded` once the put succeeds. If the put fails, the `pending` row is deleted again (using a context detached from the request, so the cleanup survives a cancelled request).
+
+A user can't upload the same content twice: `(user_id, checksum_sha256)` is unique, so a repeat upload is rejected as `409 conflict` when the `pending` row is inserted, before anything reaches S3.
+
+A crash between the insert and the put (or a failed status update after a successful put) leaves a `pending` row behind. `storage.Service`'s `CleanupPendingFiles` sweeps rows that have been `pending` longer than the TTL (`--pendingFileTTL` / `PENDING_FILE_TTL`, default 1800 seconds), in batches of 100: if the object exists in S3 the row is marked `uploaded`, otherwise it is deleted. Nothing schedules this sweep yet.
+
+`file-service` is layered handler → `storage` service → object store / repository: the handler handles HTTP, the `storage` service (`file-service/internal/service/storage`) validates the checksum, assigns the UUID, builds the key and manages the row's lifecycle through the `storage.Repository` interface (`file-service/internal/repository/files`, sqlc over pgx), and the object store is only reached through the `storage.ObjectStore` interface (`Put`, `Exists`), which the `storage` service declares and `file-service/internal/objectstore` implements (`objectstore.NewS3` is the S3 implementation), so another backend can be added without touching the handler or the service.
 
 On success the endpoint responds `201 Created` with a JSON body describing the stored file:
 
@@ -105,6 +111,8 @@ make test-e2e
 This regenerates certs (`make certs`) and runs `go test -tags=e2e ./test/integration/...`; it needs Docker and isn't part of `make`/`make all`, since it builds and starts real containers rather than running in-process. `file-service` picks up an optional `S3_ENDPOINT` env var (unused — and a no-op — in production) to point its S3 client at LocalStack instead of real AWS for this suite.
 
 The stack also includes `user-service` and its PostgreSQL (TLS-only, with the migrations applied by a one-shot goose container), so the suite exercises the real `/register` → `/login` → upload path. `BeforeSuite` registers the test user through `POST /register` rather than seeding the database directly.
+
+`BeforeSuite` starts the stack in two phases: LocalStack first, to create the test bucket, then everything else. `file-service` checks that its S3 bucket is reachable on startup and exits if it isn't, so the bucket has to exist before it starts. Since one user can't upload the same content twice, specs that upload use `uniqueTestdata` (the fixture plus a unique row) so their checksums differ.
 
 ## Make targets
 

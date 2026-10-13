@@ -60,21 +60,8 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	composeStack = stack
 
-	composeStack.
-		WaitForService("localstack", wait.ForHealthCheck()).
-		WaitForService("file-service", wait.ForHealthCheck()).
-		WaitForService("user-service", wait.ForHealthCheck()).
-		WaitForService("api-service", wait.ForHealthCheck())
-
-	Expect(composeStack.Up(ctx, tccompose.Wait(true))).To(Succeed())
-
-	apiContainer, err := composeStack.ServiceContainer(ctx, "api-service")
-	Expect(err).NotTo(HaveOccurred())
-	apiPort, err := apiContainer.MappedPort(ctx, "8080/tcp")
-	Expect(err).NotTo(HaveOccurred())
-	apiHost, err := apiContainer.Host(ctx)
-	Expect(err).NotTo(HaveOccurred())
-	apiBaseURL = fmt.Sprintf("http://%s:%s", apiHost, apiPort.Port())
+	composeStack.WaitForService("localstack", wait.ForHealthCheck())
+	Expect(composeStack.Up(ctx, tccompose.RunServices("localstack"), tccompose.Wait(true))).To(Succeed())
 
 	lsContainer, err := composeStack.ServiceContainer(ctx, "localstack")
 	Expect(err).NotTo(HaveOccurred())
@@ -99,6 +86,20 @@ var _ = BeforeSuite(func() {
 
 	_, err = s3Client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: aws.String(e2eS3Bucket)})
 	Expect(err).NotTo(HaveOccurred())
+
+	composeStack.
+		WaitForService("file-service", wait.ForHealthCheck()).
+		WaitForService("user-service", wait.ForHealthCheck()).
+		WaitForService("api-service", wait.ForHealthCheck())
+	Expect(composeStack.Up(ctx, tccompose.Wait(true))).To(Succeed())
+
+	apiContainer, err := composeStack.ServiceContainer(ctx, "api-service")
+	Expect(err).NotTo(HaveOccurred())
+	apiPort, err := apiContainer.MappedPort(ctx, "8080/tcp")
+	Expect(err).NotTo(HaveOccurred())
+	apiHost, err := apiContainer.Host(ctx)
+	Expect(err).NotTo(HaveOccurred())
+	apiBaseURL = fmt.Sprintf("http://%s:%s", apiHost, apiPort.Port())
 
 	resp, err := register(e2eUsername, e2eEmail, e2ePassword)
 	Expect(err).NotTo(HaveOccurred())

@@ -14,6 +14,7 @@ import (
 
 	authsvr "github.com/aleksandarv/file-uploader/api-service/gen/http/auth/server"
 	filessvr "github.com/aleksandarv/file-uploader/api-service/gen/http/files/server"
+	"github.com/google/uuid"
 	. "github.com/onsi/gomega"
 )
 
@@ -32,6 +33,10 @@ func loadTestdata(name string) string {
 	b, err := os.ReadFile(filepath.Join("testdata", name))
 	Expect(err).NotTo(HaveOccurred())
 	return string(b)
+}
+
+func uniqueTestdata(name string) string {
+	return loadTestdata(name) + uuid.NewString() + ",Unique Row\n"
 }
 
 func login(username, password string) (*http.Response, error) {
