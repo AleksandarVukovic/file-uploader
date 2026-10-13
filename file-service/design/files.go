@@ -8,6 +8,7 @@ var _ = Service("files", func() {
 		Path("/api/v1")
 	})
 	Error("bad_request", ErrorResult, "Invalid request payload.")
+	Error("conflict", ErrorResult, "User has already uploaded this file.")
 	Error("internal_error", ErrorResult, "Fault in the service.")
 
 	Method("upload", func() {
@@ -66,6 +67,7 @@ var _ = Service("files", func() {
 			Header("checksum:X-Checksum-Sha256")
 			Response(StatusCreated)
 			Response("bad_request", StatusBadRequest)
+			Response("conflict", StatusConflict)
 			Response("internal_error", StatusInternalServerError)
 		})
 	})

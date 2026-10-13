@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	httpmiddleware "github.com/aleksandarv/file-uploader/common/http/middleware"
 	"github.com/aleksandarv/file-uploader/common/logger"
@@ -63,6 +64,15 @@ func (m *mockS3PutObjectAPI) PutObject(ctx context.Context, params *s3.PutObject
 	return out, args.Error(1)
 }
 
+func (m *mockS3PutObjectAPI) HeadObject(ctx context.Context, params *s3.HeadObjectInput, optFns ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
+	args := m.Called(ctx, params, optFns)
+	var out *s3.HeadObjectOutput
+	if o := args.Get(0); o != nil {
+		out = o.(*s3.HeadObjectOutput)
+	}
+	return out, args.Error(1)
+}
+
 type mockRepository struct {
 	mock.Mock
 }
@@ -72,9 +82,25 @@ func (m *mockRepository) Insert(ctx context.Context, file storage.File) (storage
 	return args.Get(0).(storage.File), args.Error(1)
 }
 
+func (m *mockRepository) UpdateStatus(ctx context.Context, id string, status storage.Status) (storage.File, error) {
+	args := m.Called(ctx, id, status)
+	return args.Get(0).(storage.File), args.Error(1)
+}
+
+func (m *mockRepository) Delete(ctx context.Context, id string) error {
+	args := m.Called(ctx, id)
+	return args.Error(0)
+}
+
+func (m *mockRepository) GetPendingFilesOlderThan(ctx context.Context, after, before time.Time) ([]storage.File, error) {
+	args := m.Called(ctx, after, before)
+	return args.Get(0).([]storage.File), args.Error(1)
+}
+
 func newAcceptingRepository() *mockRepository {
 	repo := new(mockRepository)
 	repo.On("Insert", mock.Anything, mock.Anything).Return(storage.File{}, nil)
+	repo.On("UpdateStatus", mock.Anything, mock.Anything, storage.StatusUploaded).Return(storage.File{}, nil)
 	return repo
 }
 
@@ -134,6 +160,21 @@ func TestFilesHandler_Upload_MapsInvalidChecksumToBadRequest(t *testing.T) {
 	var svcErr *goa.ServiceError
 	require.True(t, errors.As(err, &svcErr))
 	require.Equal(t, "bad_request", svcErr.Name)
+	m.AssertExpectations(t)
+}
+
+func TestFilesHandler_Upload_MapsDuplicateFileToConflict(t *testing.T) {
+	body := "id,name\n1,foo\n"
+
+	m := new(mockStorage)
+	m.On("Store", mock.Anything, mock.Anything).Return(storage.StoreResult{}, storage.ErrDuplicateFile)
+
+	h := NewFilesHandler(m)
+	_, err := h.Upload(testCtx(), uploadPayload(body, checksumOf(body)), io.NopCloser(strings.NewReader(body)))
+
+	var svcErr *goa.ServiceError
+	require.True(t, errors.As(err, &svcErr))
+	require.Equal(t, "conflict", svcErr.Name)
 	m.AssertExpectations(t)
 }
 

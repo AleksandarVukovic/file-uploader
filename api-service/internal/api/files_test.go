@@ -106,6 +106,29 @@ func TestFilesHandler_Upload_ForwardsBadRequestFromFileService(t *testing.T) {
 	mockfs.AssertExpectations(t)
 }
 
+func TestFilesHandler_Upload_ForwardsConflictFromFileService(t *testing.T) {
+	body := "id,name\n1,foo\n"
+	payload := &files.UploadPayload{
+		Filename:    "users.csv",
+		Size:        int64(len(body)),
+		ContentType: "text/csv",
+		Checksum:    checksumOf(body),
+	}
+
+	mockfs := new(mockFileService)
+	mockfs.On("Upload", mock.Anything, expectedDownstreamPayload(payload), mock.Anything).
+		Return((*fsfiles.UploadResult)(nil), fsfiles.MakeConflict(errors.New("You have already uploaded this file")))
+
+	h := NewFilesHandler(mockfs)
+	_, err := h.Upload(testCtx(), payload, io.NopCloser(strings.NewReader(body)))
+
+	var svcErr *goa.ServiceError
+	require.True(t, errors.As(err, &svcErr))
+	require.Equal(t, "conflict", svcErr.Name)
+	require.Equal(t, "You have already uploaded this file", svcErr.Message)
+	mockfs.AssertExpectations(t)
+}
+
 func TestFilesHandler_Upload_WrapsOtherFileServiceErrorsAsInternalError(t *testing.T) {
 	body := "id,name\n1,foo\n"
 

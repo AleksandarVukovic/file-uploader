@@ -80,6 +80,7 @@ func EncodeUploadRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 // restored after having been read.
 // DecodeUploadResponse may return the following errors:
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
 //   - "internal_error" (type *goa.ServiceError): http.StatusInternalServerError
 //   - error: internal error
 func DecodeUploadResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
@@ -132,6 +133,20 @@ func DecodeUploadResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 				return nil, goahttp.ErrValidationError("files", "upload", err)
 			}
 			return nil, NewUploadBadRequest(&body)
+		case http.StatusConflict:
+			var (
+				body UploadConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("files", "upload", err)
+			}
+			err = ValidateUploadConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("files", "upload", err)
+			}
+			return nil, NewUploadConflict(&body)
 		case http.StatusInternalServerError:
 			var (
 				body UploadInternalErrorResponseBody

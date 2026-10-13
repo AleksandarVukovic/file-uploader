@@ -44,6 +44,24 @@ type UploadBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// UploadConflictResponseBody is the type of the "files" service "upload"
+// endpoint HTTP response body for the "conflict" error.
+type UploadConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // UploadInternalErrorResponseBody is the type of the "files" service "upload"
 // endpoint HTTP response body for the "internal_error" error.
 type UploadInternalErrorResponseBody struct {
@@ -78,6 +96,20 @@ func NewUploadResponseBody(res *files.UploadResult) *UploadResponseBody {
 // result of the "upload" endpoint of the "files" service.
 func NewUploadBadRequestResponseBody(res *goa.ServiceError) *UploadBadRequestResponseBody {
 	body := &UploadBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUploadConflictResponseBody builds the HTTP response body from the result
+// of the "upload" endpoint of the "files" service.
+func NewUploadConflictResponseBody(res *goa.ServiceError) *UploadConflictResponseBody {
+	body := &UploadConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

@@ -86,6 +86,19 @@ paths:
                                 name: bad_request
                                 temporary: false
                                 timeout: false
+                "409":
+                    description: 'conflict: User has already uploaded this file.'
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                            example:
+                                fault: false
+                                id: 123abc
+                                message: parameter 'p' must be an integer
+                                name: conflict
+                                temporary: false
+                                timeout: false
                 "500":
                     description: 'internal_error: Fault in the service.'
                     content:
