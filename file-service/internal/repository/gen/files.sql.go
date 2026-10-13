@@ -11,10 +11,64 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const deleteFile = `-- name: DeleteFile :exec
+DELETE FROM files
+WHERE id = $1
+`
+
+func (q *Queries) DeleteFile(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, deleteFile, id)
+	return err
+}
+
+const getPendingFilesOlderThan = `-- name: GetPendingFilesOlderThan :many
+SELECT id, user_id, filename, content_type, path, root_dir, size, checksum_sha256, status, created_at, updated_at FROM files
+WHERE status = 'pending' AND created_at > $1 AND created_at < $2
+ORDER BY created_at
+LIMIT 100
+`
+
+type GetPendingFilesOlderThanParams struct {
+	CreatedAt   pgtype.Timestamptz
+	CreatedAt_2 pgtype.Timestamptz
+}
+
+func (q *Queries) GetPendingFilesOlderThan(ctx context.Context, arg GetPendingFilesOlderThanParams) ([]File, error) {
+	rows, err := q.db.Query(ctx, getPendingFilesOlderThan, arg.CreatedAt, arg.CreatedAt_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []File
+	for rows.Next() {
+		var i File
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Filename,
+			&i.ContentType,
+			&i.Path,
+			&i.RootDir,
+			&i.Size,
+			&i.ChecksumSha256,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertFile = `-- name: InsertFile :one
 INSERT INTO files (id, user_id, filename, content_type, path, root_dir, size, checksum_sha256)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, user_id, filename, content_type, path, root_dir, size, checksum_sha256, created_at, updated_at
+RETURNING id, user_id, filename, content_type, path, root_dir, size, checksum_sha256, status, created_at, updated_at
 `
 
 type InsertFileParams struct {
@@ -49,6 +103,38 @@ func (q *Queries) InsertFile(ctx context.Context, arg InsertFileParams) (File, e
 		&i.RootDir,
 		&i.Size,
 		&i.ChecksumSha256,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateFileStatus = `-- name: UpdateFileStatus :one
+UPDATE files
+SET status = $2, updated_at = now()
+WHERE id = $1
+RETURNING id, user_id, filename, content_type, path, root_dir, size, checksum_sha256, status, created_at, updated_at
+`
+
+type UpdateFileStatusParams struct {
+	ID     pgtype.UUID
+	Status FileStatus
+}
+
+func (q *Queries) UpdateFileStatus(ctx context.Context, arg UpdateFileStatusParams) (File, error) {
+	row := q.db.QueryRow(ctx, updateFileStatus, arg.ID, arg.Status)
+	var i File
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Filename,
+		&i.ContentType,
+		&i.Path,
+		&i.RootDir,
+		&i.Size,
+		&i.ChecksumSha256,
+		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

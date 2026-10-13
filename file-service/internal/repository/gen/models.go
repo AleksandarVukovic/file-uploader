@@ -5,8 +5,54 @@
 package sqlc
 
 import (
+	"database/sql/driver"
+	"fmt"
+
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+type FileStatus string
+
+const (
+	FileStatusPending  FileStatus = "pending"
+	FileStatusUploaded FileStatus = "uploaded"
+	FileStatusFailed   FileStatus = "failed"
+)
+
+func (e *FileStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = FileStatus(s)
+	case string:
+		*e = FileStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for FileStatus: %T", src)
+	}
+	return nil
+}
+
+type NullFileStatus struct {
+	FileStatus FileStatus
+	Valid      bool // Valid is true if FileStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullFileStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.FileStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.FileStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullFileStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.FileStatus), nil
+}
 
 type File struct {
 	ID             pgtype.UUID
@@ -17,6 +63,7 @@ type File struct {
 	RootDir        string
 	Size           int64
 	ChecksumSha256 []byte
+	Status         FileStatus
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 }
