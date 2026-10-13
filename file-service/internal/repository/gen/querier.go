@@ -6,10 +6,15 @@ package sqlc
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type Querier interface {
+	DeleteFile(ctx context.Context, id pgtype.UUID) error
+	GetPendingFilesOlderThan(ctx context.Context, arg GetPendingFilesOlderThanParams) ([]File, error)
 	InsertFile(ctx context.Context, arg InsertFileParams) (File, error)
+	UpdateFileStatus(ctx context.Context, arg UpdateFileStatusParams) (File, error)
 }
 
 var _ Querier = (*Queries)(nil)
