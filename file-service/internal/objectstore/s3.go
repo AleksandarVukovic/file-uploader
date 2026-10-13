@@ -47,3 +47,21 @@ func (s *s3Client) Put(ctx context.Context, in storage.PutInput) error {
 	}
 	return nil
 }
+
+func (s *s3Client) Exists(ctx context.Context, key string) (bool, error) {
+	_, err := s.s3.HeadObject(ctx, &awss3.HeadObjectInput{
+		Bucket: aws.String(s.bucketName),
+		Key:    aws.String(key),
+	})
+	if err != nil {
+		var apiErr smithy.APIError
+		if errors.As(err, &apiErr) {
+			switch apiErr.ErrorCode() {
+			case "NotFound":
+				return false, nil
+			}
+		}
+		return false, fmt.Errorf("head object %q: %w", key, err)
+	}
+	return true, nil
+}

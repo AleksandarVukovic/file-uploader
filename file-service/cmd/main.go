@@ -36,14 +36,15 @@ func main() {
 
 func run() error {
 	var (
-		debug         bool
-		healthPort    int
-		mtlsPort      int
-		s3BucketName  string
-		s3Endpoint    string
-		tlsCertFile   string
-		tlsKeyFile    string
-		tlsCACertFile string
+		debug          bool
+		healthPort     int
+		mtlsPort       int
+		s3BucketName   string
+		s3Endpoint     string
+		tlsCertFile    string
+		tlsKeyFile     string
+		tlsCACertFile  string
+		pendingFileTTL int64
 	)
 	flag.BoolVar(&debug, "debug", false, "Enable debug mode with verbose logging")
 	flag.IntVar(&healthPort, "healthPort", 8080, "HTTP port for the health endpoint")
@@ -53,6 +54,7 @@ func run() error {
 	flag.StringVar(&tlsCertFile, "tlsCertFile", "", "Path to this service's TLS certificate")
 	flag.StringVar(&tlsKeyFile, "tlsKeyFile", "", "Path to this service's TLS private key")
 	flag.StringVar(&tlsCACertFile, "tlsCACertFile", "", "Path to the CA certificate used to verify client certificates")
+	flag.Int64Var(&pendingFileTTL, "pendingFileTTL", 1800, "TTL for pending files in seconds")
 	loadFlagsFromEnv()
 	flag.Parse()
 
@@ -102,7 +104,8 @@ func run() error {
 	}
 
 	filesRepo := filesrepo.New(sqlc.New(pool))
-	filesService := api.NewFilesHandler(storage.New(objectstore.NewS3(s3BucketName, s3Client), filesRepo, s3BucketName))
+	pendingFileTTLDuration := time.Duration(pendingFileTTL) * time.Second
+	filesService := api.NewFilesHandler(storage.New(objectstore.NewS3(s3BucketName, s3Client), filesRepo, s3BucketName, pendingFileTTLDuration))
 
 	tlsCfg, err := tls.NewServerConfig(tlsCertFile, tlsKeyFile, tlsCACertFile)
 	if err != nil {
@@ -190,6 +193,7 @@ func loadFlagsFromEnv() {
 		"TLS_CERT_FILE":    "tlsCertFile",
 		"TLS_KEY_FILE":     "tlsKeyFile",
 		"TLS_CA_CERT_FILE": "tlsCACertFile",
+		"PENDING_FILE_TTL": "pendingFileTTL",
 	}
 	for env, flagName := range envToFlag {
 		if val := os.Getenv(env); val != "" {
