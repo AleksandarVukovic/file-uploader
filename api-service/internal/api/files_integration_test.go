@@ -143,6 +143,39 @@ func TestUploadEndpoint_FileServiceRejectsBadRequest(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
+func TestUploadEndpoint_FileServiceReportsDuplicateFile(t *testing.T) {
+	t.Parallel()
+
+	body := loadTestdata(t, "users.csv")
+	checksum := checksumOf(body)
+
+	fakeFileService := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.Copy(io.Discard, r.Body)
+
+		svcErr := fsfiles.MakeConflict(errors.New("You have already uploaded this file"))
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("goa-error", svcErr.GoaErrorName())
+		w.WriteHeader(http.StatusConflict)
+		_ = json.NewEncoder(w).Encode(fsserver.NewUploadConflictResponseBody(svcErr))
+	}))
+	defer fakeFileService.Close()
+
+	apiSrv := newAPIServer(t, fakeFileService)
+	defer apiSrv.Close()
+
+	req := newUploadRequest(t, apiSrv.URL, "users.csv", "text/csv", checksum, body)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusConflict, resp.StatusCode)
+	var errResp struct {
+		Message string `json:"message"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&errResp))
+	require.Equal(t, "You have already uploaded this file", errResp.Message)
+}
+
 func TestUploadEndpoint_RejectsOversizedDeclaredSize(t *testing.T) {
 	t.Parallel()
 

@@ -49,6 +49,10 @@ func (h *filesHandler) Upload(ctx context.Context, p *files.UploadPayload, body 
 		log.Error("upload rejected: incomplete body", "err", err, "filename", p.Filename, "size", p.Size)
 		return nil, files.MakeBadRequest(errors.New("Uploaded content is shorter than the declared size"))
 	}
+	if errors.Is(err, storage.ErrDuplicateFile) {
+		log.Error("upload rejected: duplicate file", "err", err, "filename", p.Filename)
+		return nil, files.MakeConflict(errors.New("File has been already uploaded"))
+	}
 	if err != nil {
 		log.Error("failed to store file", "err", err, "filename", p.Filename)
 		return nil, files.MakeInternalError(errors.New("Error while storing file"))

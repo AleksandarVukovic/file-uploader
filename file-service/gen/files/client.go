@@ -30,6 +30,7 @@ func NewClient(upload goa.Endpoint) *Client {
 // Upload calls the "upload" endpoint of the "files" service.
 // Upload may return the following errors:
 //   - "bad_request" (type *goa.ServiceError): Invalid request payload.
+//   - "conflict" (type *goa.ServiceError): User has already uploaded this file.
 //   - "internal_error" (type *goa.ServiceError): Fault in the service.
 //   - error: internal error
 func (c *Client) Upload(ctx context.Context, p *UploadPayload, req io.ReadCloser) (res *UploadResult, err error) {

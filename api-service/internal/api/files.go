@@ -40,6 +40,10 @@ func (h *filesHandler) Upload(ctx context.Context, p *goaApi.UploadPayload, body
 			log.Error("upload rejected by file-service", "filename", p.Filename, "err", err)
 			return nil, goaApi.MakeBadRequest(errors.New(svcErr.Message))
 		}
+		if errors.As(err, &svcErr) && svcErr.Name == "conflict" {
+			log.Error("duplicate upload rejected by file-service", "filename", p.Filename, "err", err)
+			return nil, goaApi.MakeConflict(errors.New(svcErr.Message))
+		}
 		log.Error("failed to forward upload to file-service", "filename", p.Filename, "err", err)
 		return nil, goaApi.MakeInternalError(errors.New("Error while storing file"))
 	}

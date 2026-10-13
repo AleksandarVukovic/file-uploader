@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aleksandarv/file-uploader/common/logger"
 	"github.com/aleksandarv/file-uploader/file-service/internal/objectstore"
@@ -32,7 +33,7 @@ func newFileServiceServer(t *testing.T, s3API *mockS3PutObjectAPI) *httptest.Ser
 func newFileServiceServerWithRepo(t *testing.T, s3API *mockS3PutObjectAPI, repo storage.Repository) *httptest.Server {
 	t.Helper()
 
-	filesHandler := NewFilesHandler(storage.New(objectstore.NewS3("test-bucket", s3API), repo, "test-bucket"))
+	filesHandler := NewFilesHandler(storage.New(objectstore.NewS3("test-bucket", s3API), repo, "test-bucket", 30*time.Minute))
 	handler := Routes(logger.NewLogger(false), filesHandler)
 
 	return httptest.NewServer(handler)
@@ -79,6 +80,10 @@ func TestUploadEndpoint_Success(t *testing.T) {
 	repo.On("Insert", mock.Anything, mock.Anything).
 		Run(func(args mock.Arguments) { gotFile = args.Get(1).(storage.File) }).
 		Return(storage.File{}, nil)
+	var gotStatusID string
+	repo.On("UpdateStatus", mock.Anything, mock.Anything, storage.StatusUploaded).
+		Run(func(args mock.Arguments) { gotStatusID = args.String(1) }).
+		Return(storage.File{}, nil)
 
 	srv := newFileServiceServerWithRepo(t, m, repo)
 	defer srv.Close()
@@ -111,7 +116,9 @@ func TestUploadEndpoint_Success(t *testing.T) {
 		RootDir:        "test-bucket",
 		Size:           int64(len(body)),
 		ChecksumSHA256: mustDecodeHex(t, checksum),
+		Status:         storage.StatusPending,
 	}, gotFile)
+	require.Equal(t, got.UUID, gotStatusID)
 	m.AssertExpectations(t)
 	repo.AssertExpectations(t)
 }
@@ -123,7 +130,6 @@ func TestUploadEndpoint_DatabaseFailureMapsToInternalError(t *testing.T) {
 	checksum := checksumOf(body)
 
 	m := new(mockS3PutObjectAPI)
-	m.On("PutObject", mock.Anything, mock.Anything, mock.Anything).Return(&s3.PutObjectOutput{}, nil)
 	repo := new(mockRepository)
 	repo.On("Insert", mock.Anything, mock.Anything).Return(storage.File{}, errors.New("db down"))
 
@@ -136,6 +142,31 @@ func TestUploadEndpoint_DatabaseFailureMapsToInternalError(t *testing.T) {
 	defer resp.Body.Close()
 
 	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	m.AssertNotCalled(t, "PutObject", mock.Anything, mock.Anything, mock.Anything)
+	repo.AssertExpectations(t)
+}
+
+func TestUploadEndpoint_DuplicateFileMapsToConflictWithoutUploading(t *testing.T) {
+	t.Parallel()
+
+	body := loadTestdata(t, "users.csv")
+	checksum := checksumOf(body)
+
+	m := new(mockS3PutObjectAPI)
+	repo := new(mockRepository)
+	repo.On("Insert", mock.Anything, mock.Anything).Return(storage.File{}, storage.ErrDuplicateFile)
+
+	srv := newFileServiceServerWithRepo(t, m, repo)
+	defer srv.Close()
+
+	req := newUploadRequest(t, srv.URL, "users.csv", "text/csv", checksum, body)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusConflict, resp.StatusCode)
+	m.AssertNotCalled(t, "PutObject", mock.Anything, mock.Anything, mock.Anything)
+	repo.AssertNotCalled(t, "Delete", mock.Anything, mock.Anything)
 	repo.AssertExpectations(t)
 }
 
@@ -148,7 +179,14 @@ func TestUploadEndpoint_S3FailureMapsToInternalError(t *testing.T) {
 	m := new(mockS3PutObjectAPI)
 	m.On("PutObject", mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, errors.New("s3 unreachable"))
+	var insertedID, deletedID string
 	repo := new(mockRepository)
+	repo.On("Insert", mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) { insertedID = args.Get(1).(storage.File).ID }).
+		Return(storage.File{}, nil)
+	repo.On("Delete", mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) { deletedID = args.String(1) }).
+		Return(nil)
 
 	srv := newFileServiceServerWithRepo(t, m, repo)
 	defer srv.Close()
@@ -159,7 +197,10 @@ func TestUploadEndpoint_S3FailureMapsToInternalError(t *testing.T) {
 	defer resp.Body.Close()
 
 	require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
-	repo.AssertNotCalled(t, "Insert", mock.Anything, mock.Anything)
+	require.NotEmpty(t, insertedID)
+	require.Equal(t, insertedID, deletedID, "the pending record must be removed when the upload fails")
+	repo.AssertNotCalled(t, "UpdateStatus", mock.Anything, mock.Anything, mock.Anything)
+	repo.AssertExpectations(t)
 }
 
 func mustDecodeHex(t *testing.T, s string) []byte {
