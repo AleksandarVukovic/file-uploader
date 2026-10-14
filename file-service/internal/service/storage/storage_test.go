@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aleksandarv/file-uploader/common/events"
 	"github.com/aleksandarv/file-uploader/common/logger"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
@@ -59,8 +60,34 @@ func (m *mockRepository) GetPendingFilesOlderThan(ctx context.Context, after, be
 	return args.Get(0).([]File), args.Error(1)
 }
 
+type mockOutbox struct {
+	mock.Mock
+}
+
+func (m *mockOutbox) Insert(ctx context.Context, event OutboxEvent) error {
+	args := m.Called(ctx, event)
+	return args.Error(0)
+}
+
+type mockTransactor struct {
+	mock.Mock
+}
+
+func (m *mockTransactor) WithinTx(ctx context.Context, txFunc func(txCtx context.Context) error) error {
+	m.Called(ctx)
+	return txFunc(ctx)
+}
+
 func newService(store ObjectStore, repo Repository) *service {
-	return New(store, repo, testRootDir, testPendingFileTTL).(*service)
+	outbox := new(mockOutbox)
+	outbox.On("Insert", mock.Anything, mock.Anything).Return(nil)
+	tx := new(mockTransactor)
+	tx.On("WithinTx", mock.Anything).Return(nil)
+	return newServiceTx(store, repo, outbox, tx)
+}
+
+func newServiceTx(store ObjectStore, repo Repository, outbox OutboxRepository, tx Transactor) *service {
+	return New(store, repo, outbox, tx, testRootDir, testPendingFileTTL).(*service)
 }
 
 func testCtx() context.Context {
@@ -281,6 +308,79 @@ func TestService_Store_UpdateStatusErrorIsReturned(t *testing.T) {
 	repo.AssertExpectations(t)
 }
 
+func TestService_Store_RecordsOutboxEventInTransaction(t *testing.T) {
+	var calls []string
+	store := new(mockObjectStore)
+	store.On("Put", mock.Anything, mock.Anything).Return(nil)
+	repo := new(mockRepository)
+	repo.On("Insert", mock.Anything, mock.Anything).Return(File{ID: "file-1", Status: StatusPending}, nil)
+	repo.On("UpdateStatus", mock.Anything, mock.Anything, StatusUploaded).
+		Run(func(mock.Arguments) { calls = append(calls, "UpdateStatus") }).
+		Return(File{Status: StatusUploaded}, nil)
+	var gotEvent OutboxEvent
+	outbox := new(mockOutbox)
+	outbox.On("Insert", mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			calls = append(calls, "OutboxInsert")
+			gotEvent = args.Get(1).(OutboxEvent)
+		}).
+		Return(nil)
+	tx := new(mockTransactor)
+	tx.On("WithinTx", mock.Anything).
+		Run(func(mock.Arguments) { calls = append(calls, "Begin") }).
+		Return(nil)
+
+	res, err := newServiceTx(store, repo, outbox, tx).Store(testCtx(), validInput())
+
+	require.NoError(t, err)
+	require.Equal(t, []string{"Begin", "UpdateStatus", "OutboxInsert"}, calls)
+	require.Equal(t, "file-1", gotEvent.AggregateID)
+	require.Equal(t, events.AggregateTypeFile, gotEvent.AggregateType)
+	require.Equal(t, events.EventTypeFileUploaded, gotEvent.EventType)
+	require.NotEmpty(t, res.UUID)
+	_, err = uuid.Parse(gotEvent.ID)
+	require.NoError(t, err)
+	tx.AssertExpectations(t)
+	outbox.AssertExpectations(t)
+	repo.AssertExpectations(t)
+}
+
+func TestService_Store_OutboxErrorIsReturned(t *testing.T) {
+	boom := errors.New("db down")
+	store := new(mockObjectStore)
+	store.On("Put", mock.Anything, mock.Anything).Return(nil)
+	repo := new(mockRepository)
+	repo.On("Insert", mock.Anything, mock.Anything).Return(File{}, nil)
+	repo.On("UpdateStatus", mock.Anything, mock.Anything, StatusUploaded).Return(File{}, nil)
+	outbox := new(mockOutbox)
+	outbox.On("Insert", mock.Anything, mock.Anything).Return(boom)
+	tx := new(mockTransactor)
+	tx.On("WithinTx", mock.Anything).Return(nil)
+
+	res, err := newServiceTx(store, repo, outbox, tx).Store(testCtx(), validInput())
+
+	require.ErrorIs(t, err, boom)
+	require.Equal(t, StoreResult{}, res)
+	repo.AssertNotCalled(t, "Delete", mock.Anything, mock.Anything)
+	outbox.AssertExpectations(t)
+}
+
+func TestService_Store_UpdateStatusErrorSkipsOutbox(t *testing.T) {
+	store := new(mockObjectStore)
+	store.On("Put", mock.Anything, mock.Anything).Return(nil)
+	repo := new(mockRepository)
+	repo.On("Insert", mock.Anything, mock.Anything).Return(File{}, nil)
+	repo.On("UpdateStatus", mock.Anything, mock.Anything, StatusUploaded).Return(File{}, errors.New("db down"))
+	outbox := new(mockOutbox)
+	tx := new(mockTransactor)
+	tx.On("WithinTx", mock.Anything).Return(nil)
+
+	_, err := newServiceTx(store, repo, outbox, tx).Store(testCtx(), validInput())
+
+	require.Error(t, err)
+	outbox.AssertNotCalled(t, "Insert", mock.Anything, mock.Anything)
+}
+
 func pendingFile(id string, createdAt time.Time) File {
 	return File{ID: id, Path: "7/" + id, Status: StatusPending, CreatedAt: createdAt}
 }
@@ -371,6 +471,61 @@ func TestService_CleanupPendingFiles(t *testing.T) {
 
 		require.NoError(t, err)
 		repo.AssertExpectations(t)
+	})
+
+	t.Run("records an outbox event in the same transaction when marking a file as uploaded", func(t *testing.T) {
+		var calls []string
+		store := new(mockObjectStore)
+		store.On("Exists", mock.Anything, "7/a").Return(true, nil)
+		repo := new(mockRepository)
+		repo.On("GetPendingFilesOlderThan", mock.Anything, mock.Anything, mock.Anything).
+			Return([]File{pendingFile("a", t0)}, nil)
+		repo.On("UpdateStatus", mock.Anything, "a", StatusUploaded).
+			Run(func(mock.Arguments) { calls = append(calls, "UpdateStatus") }).
+			Return(File{}, nil)
+		var gotEvent OutboxEvent
+		outbox := new(mockOutbox)
+		outbox.On("Insert", mock.Anything, mock.Anything).
+			Run(func(args mock.Arguments) {
+				calls = append(calls, "OutboxInsert")
+				gotEvent = args.Get(1).(OutboxEvent)
+			}).
+			Return(nil)
+		tx := new(mockTransactor)
+		tx.On("WithinTx", mock.Anything).
+			Run(func(mock.Arguments) { calls = append(calls, "Begin") }).
+			Return(nil)
+
+		err := newServiceTx(store, repo, outbox, tx).CleanupPendingFiles(testCtx())
+
+		require.NoError(t, err)
+		require.Equal(t, []string{"Begin", "UpdateStatus", "OutboxInsert"}, calls)
+		require.Equal(t, "a", gotEvent.AggregateID)
+		require.Equal(t, events.EventTypeFileUploaded, gotEvent.EventType)
+		tx.AssertExpectations(t)
+		outbox.AssertExpectations(t)
+	})
+
+	t.Run("skips a file whose outbox insert fails and keeps processing the rest", func(t *testing.T) {
+		store := new(mockObjectStore)
+		store.On("Exists", mock.Anything, mock.Anything).Return(true, nil)
+		repo := new(mockRepository)
+		repo.On("GetPendingFilesOlderThan", mock.Anything, mock.Anything, mock.Anything).
+			Return([]File{pendingFile("a", t0), pendingFile("b", t0.Add(time.Second))}, nil)
+		repo.On("UpdateStatus", mock.Anything, mock.Anything, StatusUploaded).Return(File{}, nil)
+		outbox := new(mockOutbox)
+		outbox.On("Insert", mock.Anything, mock.MatchedBy(func(e OutboxEvent) bool { return e.AggregateID == "a" })).
+			Return(errors.New("db down"))
+		outbox.On("Insert", mock.Anything, mock.MatchedBy(func(e OutboxEvent) bool { return e.AggregateID == "b" })).
+			Return(nil)
+		tx := new(mockTransactor)
+		tx.On("WithinTx", mock.Anything).Return(nil)
+
+		err := newServiceTx(store, repo, outbox, tx).CleanupPendingFiles(testCtx())
+
+		require.NoError(t, err)
+		outbox.AssertExpectations(t)
+		repo.AssertNumberOfCalls(t, "UpdateStatus", 2)
 	})
 
 	t.Run("skips a file whose delete fails and keeps processing the rest", func(t *testing.T) {

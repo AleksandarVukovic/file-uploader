@@ -20,6 +20,7 @@ import (
 	"github.com/aleksandarv/file-uploader/file-service/internal/objectstore"
 	filesrepo "github.com/aleksandarv/file-uploader/file-service/internal/repository/files"
 	sqlc "github.com/aleksandarv/file-uploader/file-service/internal/repository/gen"
+	outboxrepo "github.com/aleksandarv/file-uploader/file-service/internal/repository/outbox"
 	"github.com/aleksandarv/file-uploader/file-service/internal/service/storage"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
@@ -103,9 +104,12 @@ func run() error {
 		return err
 	}
 
-	filesRepo := filesrepo.New(sqlc.New(pool))
+	queries := sqlc.New(db.NewExecutor(pool))
+	filesRepo := filesrepo.New(queries)
+	outboxRepo := outboxrepo.New(queries)
+	transactor := db.NewTransactor(pool)
 	pendingFileTTLDuration := time.Duration(pendingFileTTL) * time.Second
-	filesService := api.NewFilesHandler(storage.New(objectstore.NewS3(s3BucketName, s3Client), filesRepo, s3BucketName, pendingFileTTLDuration))
+	filesService := api.NewFilesHandler(storage.New(objectstore.NewS3(s3BucketName, s3Client), filesRepo, outboxRepo, transactor, s3BucketName, pendingFileTTLDuration))
 
 	tlsCfg, err := tls.NewServerConfig(tlsCertFile, tlsKeyFile, tlsCACertFile)
 	if err != nil {
