@@ -19,7 +19,7 @@ migrate-down: goose-install
 	goose down
 
 migrate-create: goose-install
-	goose -s create $(NAME) sql
+	goose -dir $(SERVICE_DIR)/db/migrations -s create $(NAME) sql
 
 sqlc-install:
 	go install github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION)

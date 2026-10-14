@@ -67,3 +67,13 @@ type File struct {
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
 }
+
+type OutboxEvent struct {
+	ID            pgtype.UUID
+	AggregateType string
+	AggregateID   string
+	EventType     string
+	Payload       []byte
+	CreatedAt     pgtype.Timestamptz
+	PublishedAt   pgtype.Timestamptz
+}

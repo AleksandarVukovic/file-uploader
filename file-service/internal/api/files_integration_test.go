@@ -33,7 +33,7 @@ func newFileServiceServer(t *testing.T, s3API *mockS3PutObjectAPI) *httptest.Ser
 func newFileServiceServerWithRepo(t *testing.T, s3API *mockS3PutObjectAPI, repo storage.Repository) *httptest.Server {
 	t.Helper()
 
-	filesHandler := NewFilesHandler(storage.New(objectstore.NewS3("test-bucket", s3API), repo, "test-bucket", 30*time.Minute))
+	filesHandler := NewFilesHandler(storage.New(objectstore.NewS3("test-bucket", s3API), repo, newAcceptingOutbox(), newPassthroughTransactor(), "test-bucket", 30*time.Minute))
 	handler := Routes(logger.NewLogger(false), filesHandler)
 
 	return httptest.NewServer(handler)

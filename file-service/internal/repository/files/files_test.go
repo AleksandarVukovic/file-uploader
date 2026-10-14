@@ -35,6 +35,11 @@ func (m *mockQuerier) DeleteFile(ctx context.Context, id pgtype.UUID) error {
 	return args.Error(0)
 }
 
+func (m *mockQuerier) InsertEvent(ctx context.Context, arg sqlc.InsertEventParams) (sqlc.OutboxEvent, error) {
+	args := m.Called(ctx, arg)
+	return args.Get(0).(sqlc.OutboxEvent), args.Error(1)
+}
+
 func (m *mockQuerier) GetPendingFilesOlderThan(ctx context.Context, arg sqlc.GetPendingFilesOlderThanParams) ([]sqlc.File, error) {
 	args := m.Called(ctx, arg)
 	return args.Get(0).([]sqlc.File), args.Error(1)

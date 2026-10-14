@@ -97,6 +97,36 @@ func (m *mockRepository) GetPendingFilesOlderThan(ctx context.Context, after, be
 	return args.Get(0).([]storage.File), args.Error(1)
 }
 
+type mockOutbox struct {
+	mock.Mock
+}
+
+func (m *mockOutbox) Insert(ctx context.Context, event storage.OutboxEvent) error {
+	args := m.Called(ctx, event)
+	return args.Error(0)
+}
+
+type mockTransactor struct {
+	mock.Mock
+}
+
+func (m *mockTransactor) WithinTx(ctx context.Context, txFunc func(txCtx context.Context) error) error {
+	m.Called(ctx)
+	return txFunc(ctx)
+}
+
+func newAcceptingOutbox() *mockOutbox {
+	outbox := new(mockOutbox)
+	outbox.On("Insert", mock.Anything, mock.Anything).Return(nil)
+	return outbox
+}
+
+func newPassthroughTransactor() *mockTransactor {
+	tx := new(mockTransactor)
+	tx.On("WithinTx", mock.Anything).Return(nil)
+	return tx
+}
+
 func newAcceptingRepository() *mockRepository {
 	repo := new(mockRepository)
 	repo.On("Insert", mock.Anything, mock.Anything).Return(storage.File{}, nil)

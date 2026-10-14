@@ -36,11 +36,13 @@ Uploads are streamed rather than buffered, with metadata carried in headers:
 | `Content-Type`          | `contentType`  | Must be `text/csv`                       |
 | `X-Checksum-Sha256`     | `checksum`     | Hex-encoded SHA-256 digest of the body   |
 
-`api-service` validates and caps the body at 10Mb before forwarding it to `file-service`, which validates the checksum, assigns the UUID and records the file's metadata (owner, original filename, content type, size, checksum, S3 location, status) in its own PostgreSQL database (`file-db`) *before* uploading. The row starts as `pending`; `file-service` then uploads to S3 via `PutObject` under the key `<userID>/<uuid>` (the UUID returned in the response), passing the checksum through for S3-side integrity verification, and marks the row `uploaded` once the put succeeds. If the put fails, the `pending` row is deleted again (using a context detached from the request, so the cleanup survives a cancelled request).
+`api-service` validates and caps the body at 10Mb before forwarding it to `file-service`, which validates the checksum, assigns the UUID and records the file's metadata (owner, original filename, content type, size, checksum, S3 location, status) in its own PostgreSQL database (`file-db`) *before* uploading. The row starts as `pending`; `file-service` then uploads to S3 via `PutObject` under the key `<userID>/<uuid>` (the UUID returned in the response), passing the checksum through for S3-side integrity verification, and marks the row `uploaded` once the put succeeds, recording a `FileUploaded` event in the `outbox_events` table in the same database transaction (so a file is never `uploaded` without its event, or the reverse). If the put fails, the `pending` row is deleted again (using a context detached from the request, so the cleanup survives a cancelled request).
 
 A user can't upload the same content twice: `(user_id, checksum_sha256)` is unique, so a repeat upload is rejected as `409 conflict` when the `pending` row is inserted, before anything reaches S3.
 
-A crash between the insert and the put (or a failed status update after a successful put) leaves a `pending` row behind. `storage.Service`'s `CleanupPendingFiles` sweeps rows that have been `pending` longer than the TTL (`--pendingFileTTL` / `PENDING_FILE_TTL`, default 1800 seconds), in batches of 100: if the object exists in S3 the row is marked `uploaded`, otherwise it is deleted. Nothing schedules this sweep yet.
+A crash between the insert and the put (or a failed status update after a successful put) leaves a `pending` row behind. `storage.Service`'s `CleanupPendingFiles` sweeps rows that have been `pending` longer than the TTL (`--pendingFileTTL` / `PENDING_FILE_TTL`, default 1800 seconds), in batches of 100: if the object exists in S3 the row is marked `uploaded` (in the same transaction as the upload path, so the `FileUploaded` event is recorded too), otherwise it is deleted. Nothing schedules this sweep yet.
+
+The outbox is write-only for now: nothing publishes `outbox_events` rows yet, so `published_at` stays `NULL`.
 
 `file-service` is layered handler → `storage` service → object store / repository: the handler handles HTTP, the `storage` service (`file-service/internal/service/storage`) validates the checksum, assigns the UUID, builds the key and manages the row's lifecycle through the `storage.Repository` interface (`file-service/internal/repository/files`, sqlc over pgx), and the object store is only reached through the `storage.ObjectStore` interface (`Put`, `Exists`), which the `storage` service declares and `file-service/internal/objectstore` implements (`objectstore.NewS3` is the S3 implementation), so another backend can be added without touching the handler or the service.
 
@@ -150,6 +152,13 @@ make docker-push DOCKER_REPO=<user>/<project> DOCKER_IMAGE_TAG=v1.0.0
 ```
 
 Note: **Docker build context is always the repo root** — always invoke `docker build`/`make docker-build` from the root, not the service directory.
+
+## Database transactions
+
+Writes that must commit together (today: `file-service` marking a file `uploaded` and inserting its `FileUploaded` outbox event) use the transactor in `common/db`:
+
+- `db.NewTransactor(pool).WithinTx(ctx, fn)` begins a transaction, passes `fn` a context carrying it, and commits if `fn` returns nil; an error or panic rolls back. A nested `WithinTx` joins the outer transaction.
+- `db.NewExecutor(pool)` is a sqlc-compatible `DBTX` that runs each query on the transaction found in the context, or on the pool when there is none, so repositories stay stateless and join a transaction simply by being called with the context handed to `fn`.
 
 ## Logging
 
