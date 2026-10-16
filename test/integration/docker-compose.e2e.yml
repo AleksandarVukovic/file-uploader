@@ -124,6 +124,23 @@ services:
       user-db-migrate:
         condition: service_completed_successfully
 
+  rabbitmq:
+    image: rabbitmq:4.1.4
+    hostname: rabbitmq-node
+    ports:
+      - "5671"
+    volumes:
+      - ../../infra/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+      - ../../infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ../../infra/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+      - ../../certs:/certs:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
   file-service:
     build:
       context: ../..
@@ -143,6 +160,10 @@ services:
       TLS_CERT_FILE: /certs/file-service.pem
       TLS_KEY_FILE: /certs/file-service-key.pem
       TLS_CA_CERT_FILE: /certs/ca.pem
+      BROKER_URL: amqps://rabbitmq:5671/file-uploader
+      BROKER_EXCHANGE: ex.files
+      BROKER_TLS_CERT_FILE: /certs/rabbitmq-file-service.pem
+      BROKER_TLS_KEY_FILE: /certs/rabbitmq-file-service-key.pem
     volumes:
       - ../../certs:/certs:ro
     depends_on:
@@ -150,6 +171,8 @@ services:
         condition: service_healthy
       file-db-migrate:
         condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
 
   api-service:
     build:

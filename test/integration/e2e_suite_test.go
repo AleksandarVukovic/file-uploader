@@ -32,6 +32,7 @@ const (
 var (
 	composeStack tccompose.ComposeStack
 	apiBaseURL   string
+	rabbitmqAddr string
 	s3Client     *s3.Client
 	e2eUserID    int64
 )
@@ -48,6 +49,9 @@ var _ = BeforeSuite(func() {
 		"user-service.pem", "user-service-key.pem",
 		"user-db.pem", "user-db-key.pem",
 		"file-db.pem", "file-db-key.pem",
+		"rabbitmq.pem", "rabbitmq-key.pem",
+		"rabbitmq-file-service.pem", "rabbitmq-file-service-key.pem",
+		"rabbitmq-file-processing-service.pem", "rabbitmq-file-processing-service-key.pem",
 		"ca.pem",
 	} {
 		_, err := os.Stat(filepath.Join("..", "..", "certs", name))
@@ -100,6 +104,14 @@ var _ = BeforeSuite(func() {
 	apiHost, err := apiContainer.Host(ctx)
 	Expect(err).NotTo(HaveOccurred())
 	apiBaseURL = fmt.Sprintf("http://%s:%s", apiHost, apiPort.Port())
+
+	rabbitmqContainer, err := composeStack.ServiceContainer(ctx, "rabbitmq")
+	Expect(err).NotTo(HaveOccurred())
+	rabbitmqPort, err := rabbitmqContainer.MappedPort(ctx, "5671/tcp")
+	Expect(err).NotTo(HaveOccurred())
+	rabbitmqHost, err := rabbitmqContainer.Host(ctx)
+	Expect(err).NotTo(HaveOccurred())
+	rabbitmqAddr = fmt.Sprintf("%s:%s", rabbitmqHost, rabbitmqPort.Port())
 
 	resp, err := register(e2eUsername, e2eEmail, e2ePassword)
 	Expect(err).NotTo(HaveOccurred())
