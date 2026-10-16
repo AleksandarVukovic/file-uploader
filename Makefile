@@ -2,9 +2,8 @@
 
 SERVICES = api-service \
 			file-service \
-			user-service 
-# 			TODO: uncomment when implement it
-# 			file-processing-service \
+			user-service \
+			file-processing-service
 
 .PHONY: all all-services run common-pkg-test certs clean test-e2e
 
