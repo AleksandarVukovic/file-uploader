@@ -1,4 +1,25 @@
 services:
+  rabbitmq:
+    image: rabbitmq:4.1.4
+    container_name: rabbitmq
+    hostname: rabbitmq-node
+    mem_limit: 1g
+    ports:
+      - "5671:5671"      # AMQP protocol port
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./infra/rabbitmq/definitions.json:/etc/rabbitmq/definitions.json:ro
+      - ./infra/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./infra/rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+      - ./certs:/certs:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
   file-service:
     build:
       context: .
@@ -164,3 +185,4 @@ services:
 volumes:
   user-db-data:
   file-db-data:
+  rabbitmq_data:
