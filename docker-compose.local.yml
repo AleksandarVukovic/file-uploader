@@ -38,7 +38,7 @@ services:
       TLS_KEY_FILE: /certs/file-service-key.pem
       TLS_CA_CERT_FILE: /certs/ca.pem
       BROKER_URL: amqps://rabbitmq:5671/file-uploader
-      BROKER_EXCHANGE: ex.files
+      BROKER_FILES_EXCHANGE: ex.files
       BROKER_TLS_CERT_FILE: /certs/rabbitmq-file-service.pem
       BROKER_TLS_KEY_FILE: /certs/rabbitmq-file-service-key.pem
     volumes:

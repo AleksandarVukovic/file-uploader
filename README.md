@@ -74,13 +74,13 @@ The code is split so each layer only depends inwards: `file-service/internal/out
 
 `file-service` needs the broker at startup and exits if it can't connect. Configuration (env var or flag):
 
-| Env var                | Flag                  | Default    | Purpose                                                        |
-| ---------------------- | --------------------- | ---------- | -------------------------------------------------------------- |
-| `BROKER_URL`           | `brokerURL`           |            | RabbitMQ URL including the vhost, e.g. `amqps://rabbitmq:5671/file-uploader` |
-| `BROKER_EXCHANGE`      | `brokerFilesExchange` | `ex.files` | Exchange the events are published to                           |
-| `BROKER_TLS_CERT_FILE` | `brokerTLSCertFile`   |            | Client certificate presented to RabbitMQ; its CN is the RabbitMQ user |
-| `BROKER_TLS_KEY_FILE`  | `brokerTLSKeyFile`    |            | Private key of that client certificate                         |
-| `BROKER_BATCH_SIZE`    | `brokerBatchSize`     | `100`      | Maximum number of events published per poll                    |
+| Env var                 | Flag                  | Default    | Purpose                                                        |
+| ----------------------- | --------------------- | ---------- | -------------------------------------------------------------- |
+| `BROKER_URL`            | `brokerURL`           |            | RabbitMQ URL including the vhost, e.g. `amqps://rabbitmq:5671/file-uploader` |
+| `BROKER_FILES_EXCHANGE` | `brokerFilesExchange` | `ex.files` | Exchange the events are published to                           |
+| `BROKER_TLS_CERT_FILE`  | `brokerTLSCertFile`   |            | Client certificate presented to RabbitMQ; its CN is the RabbitMQ user |
+| `BROKER_TLS_KEY_FILE`   | `brokerTLSKeyFile`    |            | Private key of that client certificate                         |
+| `BROKER_BATCH_SIZE`     | `brokerBatchSize`     | `100`      | Maximum number of events published per poll                    |
 
 The broker's server certificate is verified against `TLS_CA_CERT_FILE`. See `file-service/.env.example`.
 

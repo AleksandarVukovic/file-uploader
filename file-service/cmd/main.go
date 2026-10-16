@@ -257,20 +257,20 @@ func isPlainHTTP(endpoint string) bool {
 
 func loadFlagsFromEnv() {
 	envToFlag := map[string]string{
-		"DEBUG":                "debug",
-		"HEALTH_PORT":          "healthPort",
-		"MTLS_PORT":            "mtlsPort",
-		"S3_BUCKET_NAME":       "bucketName",
-		"S3_ENDPOINT":          "s3Endpoint",
-		"TLS_CERT_FILE":        "tlsCertFile",
-		"TLS_KEY_FILE":         "tlsKeyFile",
-		"TLS_CA_CERT_FILE":     "tlsCACertFile",
-		"PENDING_FILE_TTL":     "pendingFileTTL",
-		"BROKER_URL":           "brokerURL",
-		"BROKER_EXCHANGE":      "brokerFilesExchange",
-		"BROKER_TLS_CERT_FILE": "brokerTLSCertFile",
-		"BROKER_TLS_KEY_FILE":  "brokerTLSKeyFile",
-		"BROKER_BATCH_SIZE":    "brokerBatchSize",
+		"DEBUG":                 "debug",
+		"HEALTH_PORT":           "healthPort",
+		"MTLS_PORT":             "mtlsPort",
+		"S3_BUCKET_NAME":        "bucketName",
+		"S3_ENDPOINT":           "s3Endpoint",
+		"TLS_CERT_FILE":         "tlsCertFile",
+		"TLS_KEY_FILE":          "tlsKeyFile",
+		"TLS_CA_CERT_FILE":      "tlsCACertFile",
+		"PENDING_FILE_TTL":      "pendingFileTTL",
+		"BROKER_URL":            "brokerURL",
+		"BROKER_FILES_EXCHANGE": "brokerFilesExchange",
+		"BROKER_TLS_CERT_FILE":  "brokerTLSCertFile",
+		"BROKER_TLS_KEY_FILE":   "brokerTLSKeyFile",
+		"BROKER_BATCH_SIZE":     "brokerBatchSize",
 	}
 	for env, flagName := range envToFlag {
 		if val := os.Getenv(env); val != "" {
