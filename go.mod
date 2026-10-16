@@ -13,10 +13,12 @@ require (
 	github.com/onsi/ginkgo/v2 v2.33.0
 	github.com/onsi/gomega v1.44.0
 	github.com/pressly/goose/v3 v3.27.2
+	github.com/rabbitmq/amqp091-go v1.15.0
 	github.com/stretchr/testify v1.12.1
 	github.com/testcontainers/testcontainers-go v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/compose v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0
+	github.com/wagslane/go-rabbitmq v0.16.1
 	goa.design/goa/v3 v3.32.0
 	golang.org/x/crypto v0.57.0
 	google.golang.org/grpc v1.84.0

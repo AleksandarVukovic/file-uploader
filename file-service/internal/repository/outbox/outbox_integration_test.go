@@ -13,6 +13,7 @@ import (
 
 	"github.com/aleksandarv/file-uploader/common/db"
 	"github.com/aleksandarv/file-uploader/common/events"
+	"github.com/aleksandarv/file-uploader/file-service/internal/outbox"
 	filesrepo "github.com/aleksandarv/file-uploader/file-service/internal/repository/files"
 	sqlc "github.com/aleksandarv/file-uploader/file-service/internal/repository/gen"
 	"github.com/aleksandarv/file-uploader/file-service/internal/service/storage"
@@ -87,7 +88,7 @@ func migrate(dsn string) error {
 
 type txFixture struct {
 	files      storage.Repository
-	outbox     storage.OutboxRepository
+	outbox     outbox.Repository
 	transactor storage.Transactor
 }
 
@@ -125,8 +126,8 @@ func (f txFixture) insertPendingFile(t *testing.T) storage.File {
 	return file
 }
 
-func newEvent(aggregateID string) storage.OutboxEvent {
-	return storage.OutboxEvent{
+func newEvent(aggregateID string) outbox.Event {
+	return outbox.Event{
 		ID:            uuid.NewString(),
 		AggregateType: events.AggregateTypeFile,
 		AggregateID:   aggregateID,
@@ -135,11 +136,31 @@ func newEvent(aggregateID string) storage.OutboxEvent {
 	}
 }
 
+func (f txFixture) insertEvents(t *testing.T, n int) []outbox.Event {
+	t.Helper()
+
+	inserted := make([]outbox.Event, 0, n)
+	for i := 0; i < n; i++ {
+		event := newEvent(uuid.NewString())
+		require.NoError(t, f.outbox.Insert(context.Background(), event))
+		inserted = append(inserted, event)
+	}
+	return inserted
+}
+
 func countEvents(t *testing.T) int {
 	t.Helper()
 
 	var n int
 	require.NoError(t, testPool.QueryRow(context.Background(), "SELECT count(*) FROM outbox_events").Scan(&n))
+	return n
+}
+
+func countPublishedEvents(t *testing.T) int {
+	t.Helper()
+
+	var n int
+	require.NoError(t, testPool.QueryRow(context.Background(), "SELECT count(*) FROM outbox_events WHERE published_at IS NOT NULL").Scan(&n))
 	return n
 }
 
@@ -250,4 +271,75 @@ func TestExecutor_UsesPoolOutsideTransaction(t *testing.T) {
 	require.NoError(t, f.outbox.Insert(context.Background(), newEvent(file.ID)))
 
 	require.Equal(t, 1, countEvents(t))
+}
+
+func TestRepository_GetUnpublished_ReturnsOldestFirstUpToLimit(t *testing.T) {
+	f := newFixture(t)
+	inserted := f.insertEvents(t, 5)
+
+	got, err := f.outbox.GetUnpublished(context.Background(), events.AggregateTypeFile, 3)
+
+	require.NoError(t, err)
+	require.Equal(t, inserted[:3], got)
+}
+
+func TestRepository_GetUnpublished_SkipsPublishedEvents(t *testing.T) {
+	f := newFixture(t)
+	inserted := f.insertEvents(t, 3)
+	require.NoError(t, f.outbox.MarkPublished(context.Background(), inserted[0].ID))
+
+	got, err := f.outbox.GetUnpublished(context.Background(), events.AggregateTypeFile, 10)
+
+	require.NoError(t, err)
+	require.Equal(t, inserted[1:], got)
+}
+
+func TestRepository_GetUnpublished_OnlyReturnsRequestedAggregateType(t *testing.T) {
+	f := newFixture(t)
+	fileEvents := f.insertEvents(t, 2)
+	other := newEvent(uuid.NewString())
+	other.AggregateType = "other"
+	require.NoError(t, f.outbox.Insert(context.Background(), other))
+
+	got, err := f.outbox.GetUnpublished(context.Background(), events.AggregateTypeFile, 10)
+
+	require.NoError(t, err)
+	require.Equal(t, fileEvents, got)
+}
+
+func TestRepository_GetUnpublished_SkipsRowsLockedByAnotherTransaction(t *testing.T) {
+	f := newFixture(t)
+	inserted := f.insertEvents(t, 2)
+
+	err := f.transactor.WithinTx(context.Background(), func(txCtx context.Context) error {
+		locked, err := f.outbox.GetUnpublished(txCtx, events.AggregateTypeFile, 10)
+		require.NoError(t, err)
+		require.Equal(t, inserted, locked)
+
+		concurrent, err := f.outbox.GetUnpublished(context.Background(), events.AggregateTypeFile, 10)
+		require.NoError(t, err)
+		require.Empty(t, concurrent, "rows locked by an open transaction must be skipped")
+		return nil
+	})
+
+	require.NoError(t, err)
+}
+
+func TestRepository_MarkPublished_SetsPublishedAt(t *testing.T) {
+	f := newFixture(t)
+	inserted := f.insertEvents(t, 2)
+
+	require.NoError(t, f.outbox.MarkPublished(context.Background(), inserted[0].ID))
+
+	require.Equal(t, 1, countPublishedEvents(t))
+}
+
+func TestRepository_MarkPublished_IsIdempotent(t *testing.T) {
+	f := newFixture(t)
+	inserted := f.insertEvents(t, 1)
+
+	require.NoError(t, f.outbox.MarkPublished(context.Background(), inserted[0].ID))
+	require.NoError(t, f.outbox.MarkPublished(context.Background(), inserted[0].ID))
+
+	require.Equal(t, 1, countPublishedEvents(t))
 }

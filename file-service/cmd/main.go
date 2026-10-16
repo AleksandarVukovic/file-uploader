@@ -15,18 +15,27 @@ import (
 
 	"github.com/aleksandarv/file-uploader/common/db"
 	"github.com/aleksandarv/file-uploader/common/logger"
+	"github.com/aleksandarv/file-uploader/common/messaging"
 	"github.com/aleksandarv/file-uploader/common/tls"
 	"github.com/aleksandarv/file-uploader/file-service/internal/api"
 	"github.com/aleksandarv/file-uploader/file-service/internal/objectstore"
 	filesrepo "github.com/aleksandarv/file-uploader/file-service/internal/repository/files"
 	sqlc "github.com/aleksandarv/file-uploader/file-service/internal/repository/gen"
 	outboxrepo "github.com/aleksandarv/file-uploader/file-service/internal/repository/outbox"
+	"github.com/aleksandarv/file-uploader/file-service/internal/service/broker"
 	"github.com/aleksandarv/file-uploader/file-service/internal/service/storage"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	awsc "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/jackc/pgx/v5/pgxpool"
+	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/wagslane/go-rabbitmq"
+)
+
+const (
+	fileEventsPollInterval = 2 * time.Second
+	brokerConfirmTimeout   = 2 * time.Second
 )
 
 func main() {
@@ -37,15 +46,20 @@ func main() {
 
 func run() error {
 	var (
-		debug          bool
-		healthPort     int
-		mtlsPort       int
-		s3BucketName   string
-		s3Endpoint     string
-		tlsCertFile    string
-		tlsKeyFile     string
-		tlsCACertFile  string
-		pendingFileTTL int64
+		debug               bool
+		healthPort          int
+		mtlsPort            int
+		s3BucketName        string
+		s3Endpoint          string
+		tlsCertFile         string
+		tlsKeyFile          string
+		tlsCACertFile       string
+		pendingFileTTL      int64
+		brokerURL           string
+		brokerFilesExchange string
+		brokerTLSCertFile   string
+		brokerTLSKeyFile    string
+		brokerBatchSize     int
 	)
 	flag.BoolVar(&debug, "debug", false, "Enable debug mode with verbose logging")
 	flag.IntVar(&healthPort, "healthPort", 8080, "HTTP port for the health endpoint")
@@ -56,6 +70,11 @@ func run() error {
 	flag.StringVar(&tlsKeyFile, "tlsKeyFile", "", "Path to this service's TLS private key")
 	flag.StringVar(&tlsCACertFile, "tlsCACertFile", "", "Path to the CA certificate used to verify client certificates")
 	flag.Int64Var(&pendingFileTTL, "pendingFileTTL", 1800, "TTL for pending files in seconds")
+	flag.StringVar(&brokerURL, "brokerURL", "", "RabbitMQ URL including the vhost (e.g. amqps://rabbitmq:5671/file-uploader)")
+	flag.StringVar(&brokerFilesExchange, "brokerFilesExchange", "ex.files", "RabbitMQ exchange that file events are published to")
+	flag.StringVar(&brokerTLSCertFile, "brokerTLSCertFile", "", "Path to the client certificate presented to RabbitMQ (its CN is the RabbitMQ user)")
+	flag.StringVar(&brokerTLSKeyFile, "brokerTLSKeyFile", "", "Path to the private key of the RabbitMQ client certificate")
+	flag.IntVar(&brokerBatchSize, "brokerBatchSize", 100, "Maximum number of file events published per poll")
 	loadFlagsFromEnv()
 	flag.Parse()
 
@@ -109,13 +128,40 @@ func run() error {
 	outboxRepo := outboxrepo.New(queries)
 	transactor := db.NewTransactor(pool)
 	pendingFileTTLDuration := time.Duration(pendingFileTTL) * time.Second
-	filesService := api.NewFilesHandler(storage.New(objectstore.NewS3(s3BucketName, s3Client), filesRepo, outboxRepo, transactor, s3BucketName, pendingFileTTLDuration))
+	storageSvc := storage.New(objectstore.NewS3(s3BucketName, s3Client), filesRepo, outboxRepo, transactor, s3BucketName, pendingFileTTLDuration)
+
+	filesService := api.NewFilesHandler(storageSvc)
 
 	tlsCfg, err := tls.NewServerConfig(tlsCertFile, tlsKeyFile, tlsCACertFile)
 	if err != nil {
 		log.Error("failed to build TLS config", "err", err)
 		return err
 	}
+
+	brokerTLSCfg, err := tls.NewClientConfig(brokerTLSCertFile, brokerTLSKeyFile, tlsCACertFile)
+	if err != nil {
+		log.Error("failed to build broker TLS config", "err", err)
+		return err
+	}
+	brokerConn, err := rabbitmq.NewConn(brokerURL,
+		rabbitmq.WithConnectionOptionsLogging,
+		rabbitmq.WithConnectionOptionsConfig(rabbitmq.Config{
+			SASL:            []amqp.Authentication{&amqp.ExternalAuth{}},
+			TLSClientConfig: brokerTLSCfg,
+		}),
+	)
+	if err != nil {
+		log.Error("failed to connect to broker", "err", err)
+		return err
+	}
+	defer brokerConn.Close()
+	brokerPub, err := rabbitmq.NewPublisher(brokerConn, rabbitmq.WithPublisherOptionsConfirm)
+	if err != nil {
+		log.Error("failed to create broker publisher", "err", err)
+		return err
+	}
+	defer brokerPub.Close()
+	brokerSvc := broker.New(outboxRepo, messaging.NewRabbitMQPublisher(brokerPub, brokerFilesExchange, brokerConfirmTimeout), brokerBatchSize)
 
 	healthAddr := ":" + strconv.Itoa(healthPort)
 	healthSrv := &http.Server{
@@ -131,6 +177,12 @@ func run() error {
 		TLSConfig:         tlsCfg,
 		ReadHeaderTimeout: time.Second * 60,
 	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		runFileEventsPoller(ctx, brokerSvc, fileEventsPollInterval)
+	})
 
 	errc := make(chan error, 3)
 	go func() {
@@ -151,8 +203,6 @@ func run() error {
 		errc <- filesSrv.ListenAndServeTLS("", "")
 	}()
 
-	ctx, cancel := context.WithCancel(ctx)
-	var wg sync.WaitGroup
 	wg.Go(func() {
 		<-ctx.Done()
 		log.Info("application shutdown requested, shutting down gracefully")
@@ -182,6 +232,24 @@ func run() error {
 	return err
 }
 
+func runFileEventsPoller(ctx context.Context, svc broker.Service, interval time.Duration) {
+	log := logger.FromCtx(ctx)
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if err := svc.PublishFileEvents(ctx); err != nil && ctx.Err() == nil {
+				log.Error("error while publishing file events", "err", err)
+			}
+		case <-ctx.Done():
+			log.Info("file events poller stopped")
+			return
+		}
+	}
+}
+
 func isPlainHTTP(endpoint string) bool {
 	u, err := url.Parse(endpoint)
 	return err == nil && u.Scheme == "http"
@@ -189,15 +257,20 @@ func isPlainHTTP(endpoint string) bool {
 
 func loadFlagsFromEnv() {
 	envToFlag := map[string]string{
-		"DEBUG":            "debug",
-		"HEALTH_PORT":      "healthPort",
-		"MTLS_PORT":        "mtlsPort",
-		"S3_BUCKET_NAME":   "bucketName",
-		"S3_ENDPOINT":      "s3Endpoint",
-		"TLS_CERT_FILE":    "tlsCertFile",
-		"TLS_KEY_FILE":     "tlsKeyFile",
-		"TLS_CA_CERT_FILE": "tlsCACertFile",
-		"PENDING_FILE_TTL": "pendingFileTTL",
+		"DEBUG":                "debug",
+		"HEALTH_PORT":          "healthPort",
+		"MTLS_PORT":            "mtlsPort",
+		"S3_BUCKET_NAME":       "bucketName",
+		"S3_ENDPOINT":          "s3Endpoint",
+		"TLS_CERT_FILE":        "tlsCertFile",
+		"TLS_KEY_FILE":         "tlsKeyFile",
+		"TLS_CA_CERT_FILE":     "tlsCACertFile",
+		"PENDING_FILE_TTL":     "pendingFileTTL",
+		"BROKER_URL":           "brokerURL",
+		"BROKER_EXCHANGE":      "brokerFilesExchange",
+		"BROKER_TLS_CERT_FILE": "brokerTLSCertFile",
+		"BROKER_TLS_KEY_FILE":  "brokerTLSKeyFile",
+		"BROKER_BATCH_SIZE":    "brokerBatchSize",
 	}
 	for env, flagName := range envToFlag {
 		if val := os.Getenv(env); val != "" {
