@@ -39,6 +39,8 @@ func dbUser() sqlc.User {
 		ID:           5,
 		Username:     "john_doe",
 		Email:        "john.doe@example.com",
+		FirstName:    "John",
+		LastName:     "Doe",
 		PasswordHash: "hash",
 		CreatedAt:    pgtype.Timestamptz{Time: createdAt, Valid: true},
 		UpdatedAt:    pgtype.Timestamptz{Time: updatedAt, Valid: true},
@@ -50,6 +52,8 @@ func wantUser() users.User {
 		ID:           5,
 		Username:     "john_doe",
 		Email:        "john.doe@example.com",
+		FirstName:    "John",
+		LastName:     "Doe",
 		PasswordHash: "hash",
 		CreatedAt:    createdAt,
 		UpdatedAt:    updatedAt,
@@ -91,7 +95,13 @@ func TestRepository_GetByUsername(t *testing.T) {
 }
 
 func TestRepository_Create(t *testing.T) {
-	newUser := users.User{Username: "john_doe", Email: "john.doe@example.com", PasswordHash: "hash"}
+	newUser := users.User{
+		Username:     "john_doe",
+		Email:        "john.doe@example.com",
+		FirstName:    "John",
+		LastName:     "Doe",
+		PasswordHash: "hash",
+	}
 
 	tests := []struct {
 		name    string
@@ -129,6 +139,8 @@ func TestRepository_Create(t *testing.T) {
 			q.On("CreateUser", mock.Anything, sqlc.CreateUserParams{
 				Username:     newUser.Username,
 				Email:        newUser.Email,
+				FirstName:    newUser.FirstName,
+				LastName:     newUser.LastName,
 				PasswordHash: newUser.PasswordHash,
 			}).Return(row, tt.dbErr)
 

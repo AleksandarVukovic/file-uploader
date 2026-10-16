@@ -31,6 +31,10 @@ type RegisterRequestBody struct {
 	Username *string `form:"username,omitempty" json:"username,omitempty" xml:"username,omitempty"`
 	// Email address of the new user
 	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
+	// First name of the new user
+	FirstName *string `form:"firstName,omitempty" json:"firstName,omitempty" xml:"firstName,omitempty"`
+	// Last name of the new user
+	LastName *string `form:"lastName,omitempty" json:"lastName,omitempty" xml:"lastName,omitempty"`
 	// Password of the new user
 	Password *string `form:"password,omitempty" json:"password,omitempty" xml:"password,omitempty"`
 }
@@ -51,6 +55,10 @@ type RegisterResponseBody struct {
 	Username string `form:"username" json:"username" xml:"username"`
 	// Email address of the new user
 	Email string `form:"email" json:"email" xml:"email"`
+	// First name of the new user
+	FirstName string `form:"firstName" json:"firstName" xml:"firstName"`
+	// Last name of the new user
+	LastName string `form:"lastName" json:"lastName" xml:"lastName"`
 }
 
 // LoginInvalidCredentialsResponseBody is the type of the "auth" service
@@ -192,9 +200,11 @@ func NewLoginResponseBody(res *auth.LoginResult) *LoginResponseBody {
 // "register" endpoint of the "auth" service.
 func NewRegisterResponseBody(res *auth.RegisterResult) *RegisterResponseBody {
 	body := &RegisterResponseBody{
-		ID:       res.ID,
-		Username: res.Username,
-		Email:    res.Email,
+		ID:        res.ID,
+		Username:  res.Username,
+		Email:     res.Email,
+		FirstName: res.FirstName,
+		LastName:  res.LastName,
 	}
 	return body
 }
@@ -310,9 +320,11 @@ func NewLoginPayload(body *LoginRequestBody) *auth.LoginPayload {
 // NewRegisterPayload builds a auth service register endpoint payload.
 func NewRegisterPayload(body *RegisterRequestBody) *auth.RegisterPayload {
 	v := &auth.RegisterPayload{
-		Username: *body.Username,
-		Email:    *body.Email,
-		Password: *body.Password,
+		Username:  *body.Username,
+		Email:     *body.Email,
+		FirstName: *body.FirstName,
+		LastName:  *body.LastName,
+		Password:  *body.Password,
 	}
 
 	return v
@@ -355,6 +367,12 @@ func ValidateRegisterRequestBody(body *RegisterRequestBody) (err error) {
 	if body.Email == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("email", "body"))
 	}
+	if body.FirstName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("firstName", "body"))
+	}
+	if body.LastName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("lastName", "body"))
+	}
 	if body.Password == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("password", "body"))
 	}
@@ -369,6 +387,22 @@ func ValidateRegisterRequestBody(body *RegisterRequestBody) (err error) {
 	}
 	if body.Email != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.email", *body.Email, goa.FormatEmail))
+	}
+	if body.FirstName != nil {
+		if utf8.RuneCountInString(*body.FirstName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.firstName", *body.FirstName, utf8.RuneCountInString(*body.FirstName), 1, true))
+		}
+		if utf8.RuneCountInString(*body.FirstName) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.firstName", *body.FirstName, utf8.RuneCountInString(*body.FirstName), 100, false))
+		}
+	}
+	if body.LastName != nil {
+		if utf8.RuneCountInString(*body.LastName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.lastName", *body.LastName, utf8.RuneCountInString(*body.LastName), 1, true))
+		}
+		if utf8.RuneCountInString(*body.LastName) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.lastName", *body.LastName, utf8.RuneCountInString(*body.LastName), 100, false))
+		}
 	}
 	if body.Password != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.password", *body.Password, "^[\\x21-\\x7E]+$"))

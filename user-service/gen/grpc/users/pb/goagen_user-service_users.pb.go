@@ -85,7 +85,11 @@ type GetByUsernameResponse struct {
 	// The timestamp when the user was created
 	CreatedAt *string `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3,oneof" json:"created_at,omitempty"`
 	// The timestamp when the user was last updated
-	UpdatedAt     *string `protobuf:"bytes,5,opt,name=updated_at,json=updatedAt,proto3,oneof" json:"updated_at,omitempty"`
+	UpdatedAt *string `protobuf:"bytes,5,opt,name=updated_at,json=updatedAt,proto3,oneof" json:"updated_at,omitempty"`
+	// The first name of the user
+	FirstName *string `protobuf:"bytes,6,opt,name=first_name,json=firstName,proto3,oneof" json:"first_name,omitempty"`
+	// The last name of the user
+	LastName      *string `protobuf:"bytes,7,opt,name=last_name,json=lastName,proto3,oneof" json:"last_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -155,6 +159,20 @@ func (x *GetByUsernameResponse) GetUpdatedAt() string {
 	return ""
 }
 
+func (x *GetByUsernameResponse) GetFirstName() string {
+	if x != nil && x.FirstName != nil {
+		return *x.FirstName
+	}
+	return ""
+}
+
+func (x *GetByUsernameResponse) GetLastName() string {
+	if x != nil && x.LastName != nil {
+		return *x.LastName
+	}
+	return ""
+}
+
 type CreateRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The username of the new user
@@ -162,7 +180,11 @@ type CreateRequest struct {
 	// The email address of the new user
 	Email *string `protobuf:"bytes,2,opt,name=email,proto3,oneof" json:"email,omitempty"`
 	// The plaintext password; hashed by the service before storage
-	Password      *string `protobuf:"bytes,3,opt,name=password,proto3,oneof" json:"password,omitempty"`
+	Password *string `protobuf:"bytes,3,opt,name=password,proto3,oneof" json:"password,omitempty"`
+	// The first name of the new user
+	FirstName *string `protobuf:"bytes,4,opt,name=first_name,json=firstName,proto3,oneof" json:"first_name,omitempty"`
+	// The last name of the new user
+	LastName      *string `protobuf:"bytes,5,opt,name=last_name,json=lastName,proto3,oneof" json:"last_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -218,6 +240,20 @@ func (x *CreateRequest) GetPassword() string {
 	return ""
 }
 
+func (x *CreateRequest) GetFirstName() string {
+	if x != nil && x.FirstName != nil {
+		return *x.FirstName
+	}
+	return ""
+}
+
+func (x *CreateRequest) GetLastName() string {
+	if x != nil && x.LastName != nil {
+		return *x.LastName
+	}
+	return ""
+}
+
 type CreateResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Unique identifier of the user
@@ -229,7 +265,11 @@ type CreateResponse struct {
 	// The timestamp when the user was created
 	CreatedAt *string `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3,oneof" json:"created_at,omitempty"`
 	// The timestamp when the user was last updated
-	UpdatedAt     *string `protobuf:"bytes,5,opt,name=updated_at,json=updatedAt,proto3,oneof" json:"updated_at,omitempty"`
+	UpdatedAt *string `protobuf:"bytes,5,opt,name=updated_at,json=updatedAt,proto3,oneof" json:"updated_at,omitempty"`
+	// The first name of the user
+	FirstName *string `protobuf:"bytes,6,opt,name=first_name,json=firstName,proto3,oneof" json:"first_name,omitempty"`
+	// The last name of the user
+	LastName      *string `protobuf:"bytes,7,opt,name=last_name,json=lastName,proto3,oneof" json:"last_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -299,6 +339,20 @@ func (x *CreateResponse) GetUpdatedAt() string {
 	return ""
 }
 
+func (x *CreateResponse) GetFirstName() string {
+	if x != nil && x.FirstName != nil {
+		return *x.FirstName
+	}
+	return ""
+}
+
+func (x *CreateResponse) GetLastName() string {
+	if x != nil && x.LastName != nil {
+		return *x.LastName
+	}
+	return ""
+}
+
 type AuthenticateRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The username to authenticate
@@ -364,7 +418,11 @@ type AuthenticateResponse struct {
 	// The timestamp when the user was created
 	CreatedAt *string `protobuf:"bytes,4,opt,name=created_at,json=createdAt,proto3,oneof" json:"created_at,omitempty"`
 	// The timestamp when the user was last updated
-	UpdatedAt     *string `protobuf:"bytes,5,opt,name=updated_at,json=updatedAt,proto3,oneof" json:"updated_at,omitempty"`
+	UpdatedAt *string `protobuf:"bytes,5,opt,name=updated_at,json=updatedAt,proto3,oneof" json:"updated_at,omitempty"`
+	// The first name of the user
+	FirstName *string `protobuf:"bytes,6,opt,name=first_name,json=firstName,proto3,oneof" json:"first_name,omitempty"`
+	// The last name of the user
+	LastName      *string `protobuf:"bytes,7,opt,name=last_name,json=lastName,proto3,oneof" json:"last_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -434,6 +492,20 @@ func (x *AuthenticateResponse) GetUpdatedAt() string {
 	return ""
 }
 
+func (x *AuthenticateResponse) GetFirstName() string {
+	if x != nil && x.FirstName != nil {
+		return *x.FirstName
+	}
+	return ""
+}
+
+func (x *AuthenticateResponse) GetLastName() string {
+	if x != nil && x.LastName != nil {
+		return *x.LastName
+	}
+	return ""
+}
+
 var File_goagen_user_service_users_proto protoreflect.FileDescriptor
 
 const file_goagen_user_service_users_proto_rawDesc = "" +
@@ -441,7 +513,7 @@ const file_goagen_user_service_users_proto_rawDesc = "" +
 	"\x1fgoagen_user-service_users.proto\x12\x05users\"D\n" +
 	"\x14GetByUsernameRequest\x12\x1f\n" +
 	"\busername\x18\x01 \x01(\tH\x00R\busername\x88\x01\x01B\v\n" +
-	"\t_username\"\xec\x01\n" +
+	"\t_username\"\xcf\x02\n" +
 	"\x15GetByUsernameResponse\x12\x13\n" +
 	"\x02id\x18\x01 \x01(\x12H\x00R\x02id\x88\x01\x01\x12\x1f\n" +
 	"\busername\x18\x02 \x01(\tH\x01R\busername\x88\x01\x01\x12\x19\n" +
@@ -449,19 +521,31 @@ const file_goagen_user_service_users_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x04 \x01(\tH\x03R\tcreatedAt\x88\x01\x01\x12\"\n" +
 	"\n" +
-	"updated_at\x18\x05 \x01(\tH\x04R\tupdatedAt\x88\x01\x01B\x05\n" +
+	"updated_at\x18\x05 \x01(\tH\x04R\tupdatedAt\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"first_name\x18\x06 \x01(\tH\x05R\tfirstName\x88\x01\x01\x12 \n" +
+	"\tlast_name\x18\a \x01(\tH\x06R\blastName\x88\x01\x01B\x05\n" +
 	"\x03_idB\v\n" +
 	"\t_usernameB\b\n" +
 	"\x06_emailB\r\n" +
 	"\v_created_atB\r\n" +
-	"\v_updated_at\"\x90\x01\n" +
+	"\v_updated_atB\r\n" +
+	"\v_first_nameB\f\n" +
+	"\n" +
+	"_last_name\"\xf3\x01\n" +
 	"\rCreateRequest\x12\x1f\n" +
 	"\busername\x18\x01 \x01(\tH\x00R\busername\x88\x01\x01\x12\x19\n" +
 	"\x05email\x18\x02 \x01(\tH\x01R\x05email\x88\x01\x01\x12\x1f\n" +
-	"\bpassword\x18\x03 \x01(\tH\x02R\bpassword\x88\x01\x01B\v\n" +
+	"\bpassword\x18\x03 \x01(\tH\x02R\bpassword\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"first_name\x18\x04 \x01(\tH\x03R\tfirstName\x88\x01\x01\x12 \n" +
+	"\tlast_name\x18\x05 \x01(\tH\x04R\blastName\x88\x01\x01B\v\n" +
 	"\t_usernameB\b\n" +
 	"\x06_emailB\v\n" +
-	"\t_password\"\xe5\x01\n" +
+	"\t_passwordB\r\n" +
+	"\v_first_nameB\f\n" +
+	"\n" +
+	"_last_name\"\xc8\x02\n" +
 	"\x0eCreateResponse\x12\x13\n" +
 	"\x02id\x18\x01 \x01(\x12H\x00R\x02id\x88\x01\x01\x12\x1f\n" +
 	"\busername\x18\x02 \x01(\tH\x01R\busername\x88\x01\x01\x12\x19\n" +
@@ -469,17 +553,23 @@ const file_goagen_user_service_users_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x04 \x01(\tH\x03R\tcreatedAt\x88\x01\x01\x12\"\n" +
 	"\n" +
-	"updated_at\x18\x05 \x01(\tH\x04R\tupdatedAt\x88\x01\x01B\x05\n" +
+	"updated_at\x18\x05 \x01(\tH\x04R\tupdatedAt\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"first_name\x18\x06 \x01(\tH\x05R\tfirstName\x88\x01\x01\x12 \n" +
+	"\tlast_name\x18\a \x01(\tH\x06R\blastName\x88\x01\x01B\x05\n" +
 	"\x03_idB\v\n" +
 	"\t_usernameB\b\n" +
 	"\x06_emailB\r\n" +
 	"\v_created_atB\r\n" +
-	"\v_updated_at\"q\n" +
+	"\v_updated_atB\r\n" +
+	"\v_first_nameB\f\n" +
+	"\n" +
+	"_last_name\"q\n" +
 	"\x13AuthenticateRequest\x12\x1f\n" +
 	"\busername\x18\x01 \x01(\tH\x00R\busername\x88\x01\x01\x12\x1f\n" +
 	"\bpassword\x18\x02 \x01(\tH\x01R\bpassword\x88\x01\x01B\v\n" +
 	"\t_usernameB\v\n" +
-	"\t_password\"\xeb\x01\n" +
+	"\t_password\"\xce\x02\n" +
 	"\x14AuthenticateResponse\x12\x13\n" +
 	"\x02id\x18\x01 \x01(\x12H\x00R\x02id\x88\x01\x01\x12\x1f\n" +
 	"\busername\x18\x02 \x01(\tH\x01R\busername\x88\x01\x01\x12\x19\n" +
@@ -487,12 +577,18 @@ const file_goagen_user_service_users_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x04 \x01(\tH\x03R\tcreatedAt\x88\x01\x01\x12\"\n" +
 	"\n" +
-	"updated_at\x18\x05 \x01(\tH\x04R\tupdatedAt\x88\x01\x01B\x05\n" +
+	"updated_at\x18\x05 \x01(\tH\x04R\tupdatedAt\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"first_name\x18\x06 \x01(\tH\x05R\tfirstName\x88\x01\x01\x12 \n" +
+	"\tlast_name\x18\a \x01(\tH\x06R\blastName\x88\x01\x01B\x05\n" +
 	"\x03_idB\v\n" +
 	"\t_usernameB\b\n" +
 	"\x06_emailB\r\n" +
 	"\v_created_atB\r\n" +
-	"\v_updated_at2\xd3\x01\n" +
+	"\v_updated_atB\r\n" +
+	"\v_first_nameB\f\n" +
+	"\n" +
+	"_last_name2\xd3\x01\n" +
 	"\x05Users\x12J\n" +
 	"\rGetByUsername\x12\x1b.users.GetByUsernameRequest\x1a\x1c.users.GetByUsernameResponse\x125\n" +
 	"\x06Create\x12\x14.users.CreateRequest\x1a\x15.users.CreateResponse\x12G\n" +

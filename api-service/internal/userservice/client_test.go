@@ -15,9 +15,11 @@ import (
 )
 
 const (
-	testUsername = "john_doe"
-	testEmail    = "john.doe@example.com"
-	testPassword = "Correct-Horse-42"
+	testUsername  = "john_doe"
+	testEmail     = "john.doe@example.com"
+	testFirstName = "John"
+	testLastName  = "Doe"
+	testPassword  = "Correct-Horse-42"
 )
 
 type mockUsersClient struct {
@@ -49,12 +51,18 @@ func TestClient_Authenticate(t *testing.T) {
 		users := &mockUsersClient{}
 		users.On("Authenticate", mock.Anything, mock.MatchedBy(func(req *userspb.AuthenticateRequest) bool {
 			return proto.Equal(req, wantReq)
-		})).Return(&userspb.AuthenticateResponse{Id: proto.Int64(7), Username: proto.String(testUsername), Email: proto.String(testEmail)}, nil)
+		})).Return(&userspb.AuthenticateResponse{
+			Id:        proto.Int64(7),
+			Username:  proto.String(testUsername),
+			Email:     proto.String(testEmail),
+			FirstName: proto.String(testFirstName),
+			LastName:  proto.String(testLastName),
+		}, nil)
 
 		got, err := (&Client{users: users}).Authenticate(context.Background(), testUsername, testPassword)
 
 		require.NoError(t, err)
-		require.Equal(t, User{ID: 7, Username: testUsername, Email: testEmail}, got)
+		require.Equal(t, User{ID: 7, Username: testUsername, Email: testEmail, FirstName: testFirstName, LastName: testLastName}, got)
 		users.AssertExpectations(t)
 	})
 
@@ -95,21 +103,29 @@ func TestClient_Authenticate(t *testing.T) {
 
 func TestClient_Create(t *testing.T) {
 	wantReq := &userspb.CreateRequest{
-		Username: proto.String(testUsername),
-		Email:    proto.String(testEmail),
-		Password: proto.String(testPassword),
+		Username:  proto.String(testUsername),
+		Email:     proto.String(testEmail),
+		FirstName: proto.String(testFirstName),
+		LastName:  proto.String(testLastName),
+		Password:  proto.String(testPassword),
 	}
 
 	t.Run("maps the response to a User", func(t *testing.T) {
 		users := &mockUsersClient{}
 		users.On("Create", mock.Anything, mock.MatchedBy(func(req *userspb.CreateRequest) bool {
 			return proto.Equal(req, wantReq)
-		})).Return(&userspb.CreateResponse{Id: proto.Int64(3), Username: proto.String(testUsername), Email: proto.String(testEmail)}, nil)
+		})).Return(&userspb.CreateResponse{
+			Id:        proto.Int64(3),
+			Username:  proto.String(testUsername),
+			Email:     proto.String(testEmail),
+			FirstName: proto.String(testFirstName),
+			LastName:  proto.String(testLastName),
+		}, nil)
 
-		got, err := (&Client{users: users}).Create(context.Background(), testUsername, testEmail, testPassword)
+		got, err := (&Client{users: users}).Create(context.Background(), testUsername, testEmail, testFirstName, testLastName, testPassword)
 
 		require.NoError(t, err)
-		require.Equal(t, User{ID: 3, Username: testUsername, Email: testEmail}, got)
+		require.Equal(t, User{ID: 3, Username: testUsername, Email: testEmail, FirstName: testFirstName, LastName: testLastName}, got)
 		users.AssertExpectations(t)
 	})
 
@@ -118,7 +134,7 @@ func TestClient_Create(t *testing.T) {
 		users.On("Create", mock.Anything, mock.Anything).
 			Return(nil, status.Error(codes.InvalidArgument, "password must contain a digit"))
 
-		_, err := (&Client{users: users}).Create(context.Background(), testUsername, testEmail, testPassword)
+		_, err := (&Client{users: users}).Create(context.Background(), testUsername, testEmail, testFirstName, testLastName, testPassword)
 
 		require.ErrorIs(t, err, ErrInvalidInput)
 		require.ErrorContains(t, err, "password must contain a digit")
@@ -138,7 +154,7 @@ func TestClient_Create(t *testing.T) {
 			users := &mockUsersClient{}
 			users.On("Create", mock.Anything, mock.Anything).Return(nil, status.Error(tt.code, "boom"))
 
-			got, err := (&Client{users: users}).Create(context.Background(), testUsername, testEmail, testPassword)
+			got, err := (&Client{users: users}).Create(context.Background(), testUsername, testEmail, testFirstName, testLastName, testPassword)
 
 			require.ErrorIs(t, err, tt.wantErr)
 			require.Zero(t, got)
@@ -150,7 +166,7 @@ func TestClient_Create(t *testing.T) {
 		users := &mockUsersClient{}
 		users.On("Create", mock.Anything, mock.Anything).Return(nil, errors.New("plain error"))
 
-		_, err := (&Client{users: users}).Create(context.Background(), testUsername, testEmail, testPassword)
+		_, err := (&Client{users: users}).Create(context.Background(), testUsername, testEmail, testFirstName, testLastName, testPassword)
 
 		require.EqualError(t, err, "plain error")
 	})

@@ -36,7 +36,7 @@ func (h *usersHandler) GetByUsername(ctx context.Context, p *users.GetByUsername
 func (h *usersHandler) Create(ctx context.Context, p *users.CreatePayload) (*users.User, error) {
 	log := logger.FromCtx(ctx)
 
-	u, err := h.svc.Create(ctx, p.Username, p.Email, p.Password)
+	u, err := h.svc.Create(ctx, p.Username, p.Email, p.FirstName, p.LastName, p.Password)
 	switch {
 	case errors.Is(err, userssvc.ErrReservedUsername), errors.Is(err, userssvc.ErrWeakPassword):
 		return nil, users.MakeBadRequest(err)
@@ -72,6 +72,8 @@ func toUser(u userssvc.User) *users.User {
 		ID:        u.ID,
 		Username:  u.Username,
 		Email:     u.Email,
+		FirstName: u.FirstName,
+		LastName:  u.LastName,
 		CreatedAt: u.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt: u.UpdatedAt.UTC().Format(time.RFC3339),
 	}

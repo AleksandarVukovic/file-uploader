@@ -11,9 +11,11 @@ import (
 )
 
 const (
-	validUsername = "john_doe"
-	validEmail    = "john.doe@example.com"
-	validPassword = "Correct-Horse-42"
+	validUsername  = "john_doe"
+	validEmail     = "john.doe@example.com"
+	validFirstName = "John"
+	validLastName  = "Doe"
+	validPassword  = "Correct-Horse-42"
 )
 
 type mockRepo struct {
@@ -67,14 +69,18 @@ func TestService_Create(t *testing.T) {
 		repo.On("Create", mock.Anything, mock.MatchedBy(func(u User) bool {
 			return u.Username == validUsername &&
 				u.Email == validEmail &&
+				u.FirstName == validFirstName &&
+				u.LastName == validLastName &&
 				u.PasswordHash != validPassword &&
 				bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(validPassword)) == nil
-		})).Return(User{ID: 1, Username: validUsername, Email: validEmail}, nil)
+		})).Return(User{ID: 1, Username: validUsername, Email: validEmail, FirstName: validFirstName, LastName: validLastName}, nil)
 
-		got, err := New(repo).Create(context.Background(), validUsername, validEmail, validPassword)
+		got, err := New(repo).Create(context.Background(), validUsername, validEmail, validFirstName, validLastName, validPassword)
 
 		require.NoError(t, err)
 		require.Equal(t, int64(1), got.ID)
+		require.Equal(t, validFirstName, got.FirstName)
+		require.Equal(t, validLastName, got.LastName)
 		repo.AssertExpectations(t)
 	})
 
@@ -83,7 +89,7 @@ func TestService_Create(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				repo := &mockRepo{}
 
-				_, err := New(repo).Create(context.Background(), name, validEmail, validPassword)
+				_, err := New(repo).Create(context.Background(), name, validEmail, validFirstName, validLastName, validPassword)
 
 				require.ErrorIs(t, err, ErrReservedUsername)
 				repo.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
@@ -102,7 +108,7 @@ func TestService_Create(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				repo := &mockRepo{}
 
-				_, err := New(repo).Create(context.Background(), validUsername, validEmail, password)
+				_, err := New(repo).Create(context.Background(), validUsername, validEmail, validFirstName, validLastName, password)
 
 				require.ErrorIs(t, err, ErrWeakPassword)
 				repo.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
@@ -115,7 +121,7 @@ func TestService_Create(t *testing.T) {
 			repo := &mockRepo{}
 			repo.On("Create", mock.Anything, mock.Anything).Return(User{}, repoErr)
 
-			_, err := New(repo).Create(context.Background(), validUsername, validEmail, validPassword)
+			_, err := New(repo).Create(context.Background(), validUsername, validEmail, validFirstName, validLastName, validPassword)
 
 			require.ErrorIs(t, err, repoErr)
 			repo.AssertExpectations(t)

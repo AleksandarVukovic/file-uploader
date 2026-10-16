@@ -49,7 +49,7 @@ func BuildCreatePayload(usersCreateMessage *string) (*users.CreatePayload, error
 		if usersCreateMessage != nil {
 			err = protojson.Unmarshal([]byte(*usersCreateMessage), &message)
 			if err != nil {
-				return nil, fmt.Errorf("invalid JSON for message, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"email\": \"john.doe@example.com\",\n      \"password\": \"CorrectHorse-42\",\n      \"username\": \"john_doe\"\n   }'")
+				return nil, fmt.Errorf("invalid JSON for message, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"email\": \"john.doe@example.com\",\n      \"first_name\": \"John\",\n      \"last_name\": \"Doe\",\n      \"password\": \"CorrectHorse-42\",\n      \"username\": \"john_doe\"\n   }'")
 			}
 		}
 	}
@@ -58,9 +58,11 @@ func BuildCreatePayload(usersCreateMessage *string) (*users.CreatePayload, error
 		return zero, err
 	}
 	v := &users.CreatePayload{
-		Username: *message.Username,
-		Email:    *message.Email,
-		Password: *message.Password,
+		Username:  *message.Username,
+		Email:     *message.Email,
+		Password:  *message.Password,
+		FirstName: *message.FirstName,
+		LastName:  *message.LastName,
 	}
 
 	return v, nil

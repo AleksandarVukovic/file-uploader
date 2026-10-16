@@ -23,6 +23,8 @@ import (
 const (
 	e2eUsername  = "e2e_user"
 	e2eEmail     = "e2e.user@example.com"
+	e2eFirstName = "E2E"
+	e2eLastName  = "User"
 	e2ePassword  = "E2e-Password-1"
 	e2eJWTSecret = "e2e-test-secret"
 	e2eS3Bucket  = "e2e-test-bucket"
@@ -113,7 +115,7 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 	rabbitmqAddr = fmt.Sprintf("%s:%s", rabbitmqHost, rabbitmqPort.Port())
 
-	resp, err := register(e2eUsername, e2eEmail, e2ePassword)
+	resp, err := register(e2eUsername, e2eEmail, e2eFirstName, e2eLastName, e2ePassword)
 	Expect(err).NotTo(HaveOccurred())
 	defer resp.Body.Close()
 	Expect(resp.StatusCode).To(Equal(http.StatusCreated))

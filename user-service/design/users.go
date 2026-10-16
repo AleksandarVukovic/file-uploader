@@ -52,7 +52,17 @@ var _ = Service("users", func() {
 				Pattern(`^[\x21-\x7E]+$`)
 				Example("CorrectHorse-42")
 			})
-			Required("username", "email", "password")
+			Field(4, "firstName", String, "The first name of the new user", func() {
+				MinLength(1)
+				MaxLength(100)
+				Example("John")
+			})
+			Field(5, "lastName", String, "The last name of the new user", func() {
+				MinLength(1)
+				MaxLength(100)
+				Example("Doe")
+			})
+			Required("username", "email", "password", "firstName", "lastName")
 		})
 
 		Result(User)

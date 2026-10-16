@@ -35,6 +35,8 @@ func NewProtoGetByUsernameResponse(result *usersviews.UserView) *userspb.GetByUs
 		Email:     result.Email,
 		CreatedAt: result.CreatedAt,
 		UpdatedAt: result.UpdatedAt,
+		FirstName: result.FirstName,
+		LastName:  result.LastName,
 	}
 	return message
 }
@@ -42,9 +44,11 @@ func NewProtoGetByUsernameResponse(result *usersviews.UserView) *userspb.GetByUs
 // NewCreatePayload builds *users.CreatePayload from *userspb.CreateRequest.
 func NewCreatePayload(message *userspb.CreateRequest) *users.CreatePayload {
 	v := &users.CreatePayload{
-		Username: *message.Username,
-		Email:    *message.Email,
-		Password: *message.Password,
+		Username:  *message.Username,
+		Email:     *message.Email,
+		Password:  *message.Password,
+		FirstName: *message.FirstName,
+		LastName:  *message.LastName,
 	}
 	return v
 }
@@ -58,6 +62,8 @@ func NewProtoCreateResponse(result *usersviews.UserView) *userspb.CreateResponse
 		Email:     result.Email,
 		CreatedAt: result.CreatedAt,
 		UpdatedAt: result.UpdatedAt,
+		FirstName: result.FirstName,
+		LastName:  result.LastName,
 	}
 	return message
 }
@@ -81,6 +87,8 @@ func NewProtoAuthenticateResponse(result *usersviews.UserView) *userspb.Authenti
 		Email:     result.Email,
 		CreatedAt: result.CreatedAt,
 		UpdatedAt: result.UpdatedAt,
+		FirstName: result.FirstName,
+		LastName:  result.LastName,
 	}
 	return message
 }
@@ -114,6 +122,12 @@ func ValidateCreateRequest(message *userspb.CreateRequest) (err error) {
 	if message.Password == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("password", "message"))
 	}
+	if message.FirstName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("firstName", "message"))
+	}
+	if message.LastName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("lastName", "message"))
+	}
 	if message.Username != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("message.username", *message.Username, "^[a-z][a-z0-9_]*$"))
 		if utf8.RuneCountInString(*message.Username) < 3 {
@@ -133,6 +147,22 @@ func ValidateCreateRequest(message *userspb.CreateRequest) (err error) {
 		}
 		if utf8.RuneCountInString(*message.Password) > 72 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("message.password", *message.Password, utf8.RuneCountInString(*message.Password), 72, false))
+		}
+	}
+	if message.FirstName != nil {
+		if utf8.RuneCountInString(*message.FirstName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("message.firstName", *message.FirstName, utf8.RuneCountInString(*message.FirstName), 1, true))
+		}
+		if utf8.RuneCountInString(*message.FirstName) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("message.firstName", *message.FirstName, utf8.RuneCountInString(*message.FirstName), 100, false))
+		}
+	}
+	if message.LastName != nil {
+		if utf8.RuneCountInString(*message.LastName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("message.lastName", *message.LastName, utf8.RuneCountInString(*message.LastName), 1, true))
+		}
+		if utf8.RuneCountInString(*message.LastName) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("message.lastName", *message.LastName, utf8.RuneCountInString(*message.LastName), 100, false))
 		}
 	}
 	return

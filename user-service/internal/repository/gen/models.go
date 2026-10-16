@@ -15,4 +15,6 @@ type User struct {
 	PasswordHash string
 	CreatedAt    pgtype.Timestamptz
 	UpdatedAt    pgtype.Timestamptz
+	FirstName    string
+	LastName     string
 }

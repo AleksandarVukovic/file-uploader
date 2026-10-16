@@ -161,15 +161,21 @@ func newRegisterRequest(t *testing.T, baseURL string, payload map[string]string)
 }
 
 func validRegisterPayload() map[string]string {
-	return map[string]string{"username": testUsername, "email": "john.doe@example.com", "password": testPassword}
+	return map[string]string{
+		"username":  testUsername,
+		"email":     "john.doe@example.com",
+		"firstName": "John",
+		"lastName":  "Doe",
+		"password":  testPassword,
+	}
 }
 
 func TestRegisterEndpoint_Success(t *testing.T) {
 	t.Parallel()
 
 	users := &mockUserService{}
-	users.On("Create", mock.Anything, testUsername, "john.doe@example.com", testPassword).
-		Return(userservice.User{ID: 5, Username: testUsername, Email: "john.doe@example.com"}, nil)
+	users.On("Create", mock.Anything, testUsername, "john.doe@example.com", "John", "Doe", testPassword).
+		Return(userservice.User{ID: 5, Username: testUsername, Email: "john.doe@example.com", FirstName: "John", LastName: "Doe"}, nil)
 	srv := newAuthServer(t, users)
 	defer srv.Close()
 
@@ -179,14 +185,18 @@ func TestRegisterEndpoint_Success(t *testing.T) {
 
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	var body struct {
-		ID       int64  `json:"id"`
-		Username string `json:"username"`
-		Email    string `json:"email"`
+		ID        int64  `json:"id"`
+		Username  string `json:"username"`
+		Email     string `json:"email"`
+		FirstName string `json:"firstName"`
+		LastName  string `json:"lastName"`
 	}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 	require.Equal(t, int64(5), body.ID)
 	require.Equal(t, testUsername, body.Username)
 	require.Equal(t, "john.doe@example.com", body.Email)
+	require.Equal(t, "John", body.FirstName)
+	require.Equal(t, "Doe", body.LastName)
 	users.AssertExpectations(t)
 }
 
@@ -208,7 +218,7 @@ func TestRegisterEndpoint_MapsUserServiceErrors(t *testing.T) {
 			t.Parallel()
 
 			users := &mockUserService{}
-			users.On("Create", mock.Anything, testUsername, "john.doe@example.com", testPassword).
+			users.On("Create", mock.Anything, testUsername, "john.doe@example.com", "John", "Doe", testPassword).
 				Return(userservice.User{}, tt.err)
 			srv := newAuthServer(t, users)
 			defer srv.Close()
@@ -234,6 +244,10 @@ func TestRegisterEndpoint_RejectsPayloadFailingDesignValidation(t *testing.T) {
 		{"username starting with a digit", map[string]string{"username": "1john"}},
 		{"short username", map[string]string{"username": "jo"}},
 		{"invalid email", map[string]string{"email": "not-an-email"}},
+		{"empty first name", map[string]string{"firstName": ""}},
+		{"empty last name", map[string]string{"lastName": ""}},
+		{"first name longer than 100 characters", map[string]string{"firstName": strings.Repeat("a", 101)}},
+		{"last name longer than 100 characters", map[string]string{"lastName": strings.Repeat("a", 101)}},
 		{"short password", map[string]string{"password": "Ab1!"}},
 		{"password with a space", map[string]string{"password": "Correct Horse 42"}},
 		{"password with non-ASCII characters", map[string]string{"password": "Correct-Horse-42é"}},
@@ -255,7 +269,7 @@ func TestRegisterEndpoint_RejectsPayloadFailingDesignValidation(t *testing.T) {
 			defer resp.Body.Close()
 
 			require.Equal(t, http.StatusBadRequest, resp.StatusCode)
-			users.AssertNotCalled(t, "Create", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+			users.AssertNotCalled(t, "Create", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 		})
 	}
 }

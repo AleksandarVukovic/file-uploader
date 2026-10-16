@@ -16,7 +16,7 @@ const tokenTTL = 15 * time.Minute
 
 type userService interface {
 	Authenticate(ctx context.Context, username, password string) (userservice.User, error)
-	Create(ctx context.Context, username, email, password string) (userservice.User, error)
+	Create(ctx context.Context, username, email, firstName, lastName, password string) (userservice.User, error)
 }
 
 type authHandler struct {
@@ -63,7 +63,7 @@ func (h *authHandler) Login(ctx context.Context, p *auth.LoginPayload) (*auth.Lo
 func (h *authHandler) Register(ctx context.Context, p *auth.RegisterPayload) (*auth.RegisterResult, error) {
 	log := logger.FromCtx(ctx)
 
-	user, err := h.users.Create(ctx, p.Username, p.Email, p.Password)
+	user, err := h.users.Create(ctx, p.Username, p.Email, p.FirstName, p.LastName, p.Password)
 	switch {
 	case errors.Is(err, userservice.ErrInvalidInput):
 		log.Error("registration rejected", "username", p.Username, "err", err)
@@ -80,5 +80,11 @@ func (h *authHandler) Register(ctx context.Context, p *auth.RegisterPayload) (*a
 	}
 
 	log.Info("user registered", "username", user.Username, "id", user.ID)
-	return &auth.RegisterResult{ID: user.ID, Username: user.Username, Email: user.Email}, nil
+	return &auth.RegisterResult{
+		ID:        user.ID,
+		Username:  user.Username,
+		Email:     user.Email,
+		FirstName: user.FirstName,
+		LastName:  user.LastName,
+	}, nil
 }

@@ -66,7 +66,7 @@ func BuildRegisterPayload(authRegisterBody *string) (*auth.RegisterPayload, erro
 		}
 		err = json.Unmarshal([]byte(*authRegisterBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"email\": \"john.doe@example.com\",\n      \"password\": \"Correct-Horse-42\",\n      \"username\": \"john_doe\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"email\": \"john.doe@example.com\",\n      \"firstName\": \"John\",\n      \"lastName\": \"Doe\",\n      \"password\": \"Correct-Horse-42\",\n      \"username\": \"john_doe\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.username", body.Username, "^[a-z][a-z0-9_]*$"))
 		if utf8.RuneCountInString(body.Username) < 3 {
@@ -76,6 +76,18 @@ func BuildRegisterPayload(authRegisterBody *string) (*auth.RegisterPayload, erro
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.username", body.Username, utf8.RuneCountInString(body.Username), 50, false))
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.email", body.Email, goa.FormatEmail))
+		if utf8.RuneCountInString(body.FirstName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.firstName", body.FirstName, utf8.RuneCountInString(body.FirstName), 1, true))
+		}
+		if utf8.RuneCountInString(body.FirstName) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.firstName", body.FirstName, utf8.RuneCountInString(body.FirstName), 100, false))
+		}
+		if utf8.RuneCountInString(body.LastName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.lastName", body.LastName, utf8.RuneCountInString(body.LastName), 1, true))
+		}
+		if utf8.RuneCountInString(body.LastName) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.lastName", body.LastName, utf8.RuneCountInString(body.LastName), 100, false))
+		}
 		err = goa.MergeErrors(err, goa.ValidatePattern("body.password", body.Password, "^[\\x21-\\x7E]+$"))
 		if utf8.RuneCountInString(body.Password) < 8 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.password", body.Password, utf8.RuneCountInString(body.Password), 8, true))
@@ -88,9 +100,11 @@ func BuildRegisterPayload(authRegisterBody *string) (*auth.RegisterPayload, erro
 		}
 	}
 	v := &auth.RegisterPayload{
-		Username: body.Username,
-		Email:    body.Email,
-		Password: body.Password,
+		Username:  body.Username,
+		Email:     body.Email,
+		FirstName: body.FirstName,
+		LastName:  body.LastName,
+		Password:  body.Password,
 	}
 
 	return v, nil

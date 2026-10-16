@@ -58,6 +58,10 @@ type RegisterPayload struct {
 	Username string
 	// Email address of the new user
 	Email string
+	// First name of the new user
+	FirstName string
+	// Last name of the new user
+	LastName string
 	// Password of the new user
 	Password string
 }
@@ -70,6 +74,10 @@ type RegisterResult struct {
 	Username string
 	// Email address of the new user
 	Email string
+	// First name of the new user
+	FirstName string
+	// Last name of the new user
+	LastName string
 }
 
 // MakeInvalidCredentials builds a goa.ServiceError from an error.

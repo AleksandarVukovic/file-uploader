@@ -270,7 +270,7 @@ func authRegisterUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth register --body '{\n      \"email\": \"john.doe@example.com\",\n      \"password\": \"Correct-Horse-42\",\n      \"username\": \"john_doe\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth register --body '{\n      \"email\": \"john.doe@example.com\",\n      \"firstName\": \"John\",\n      \"lastName\": \"Doe\",\n      \"password\": \"Correct-Horse-42\",\n      \"username\": \"john_doe\"\n   }'")
 }
 
 // filesUsage displays the usage of the files command and its subcommands.

@@ -211,7 +211,7 @@ func usersCreateUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "users create --message '{\n      \"email\": \"john.doe@example.com\",\n      \"password\": \"CorrectHorse-42\",\n      \"username\": \"john_doe\"\n   }'")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "users create --message '{\n      \"email\": \"john.doe@example.com\",\n      \"first_name\": \"John\",\n      \"last_name\": \"Doe\",\n      \"password\": \"CorrectHorse-42\",\n      \"username\": \"john_doe\"\n   }'")
 }
 
 func usersAuthenticateUsage() {

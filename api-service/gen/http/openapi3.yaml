@@ -235,6 +235,8 @@ paths:
                             $ref: '#/components/schemas/RegisterRequestBody'
                         example:
                             email: john.doe@example.com
+                            firstName: John
+                            lastName: Doe
                             password: Correct-Horse-42
                             username: john_doe
             responses:
@@ -246,7 +248,9 @@ paths:
                                 $ref: '#/components/schemas/RegisterResponseBody'
                             example:
                                 email: john.doe@example.com
+                                firstName: John
                                 id: 123
+                                lastName: Doe
                                 username: john_doe
                 "400":
                     description: 'invalid_input: The user data was rejected.'
@@ -397,6 +401,18 @@ components:
                     description: Email address of the new user
                     example: john.doe@example.com
                     format: email
+                firstName:
+                    type: string
+                    description: First name of the new user
+                    example: John
+                    minLength: 1
+                    maxLength: 100
+                lastName:
+                    type: string
+                    description: Last name of the new user
+                    example: Doe
+                    minLength: 1
+                    maxLength: 100
                 password:
                     type: string
                     description: Password of the new user
@@ -414,11 +430,15 @@ components:
             description: Request body for register.
             example:
                 email: john.doe@example.com
+                firstName: John
+                lastName: Doe
                 password: Correct-Horse-42
                 username: john_doe
             required:
                 - username
                 - email
+                - firstName
+                - lastName
                 - password
         RegisterResponseBody:
             type: object
@@ -427,23 +447,35 @@ components:
                     type: string
                     description: Email address of the new user
                     example: john.doe@example.com
+                firstName:
+                    type: string
+                    description: First name of the new user
+                    example: John
                 id:
                     type: integer
                     description: Unique identifier of the new user
                     example: 123
                     format: int64
+                lastName:
+                    type: string
+                    description: Last name of the new user
+                    example: Doe
                 username:
                     type: string
                     description: Username of the new user
                     example: john_doe
             example:
                 email: john.doe@example.com
+                firstName: John
                 id: 123
+                lastName: Doe
                 username: john_doe
             required:
                 - id
                 - username
                 - email
+                - firstName
+                - lastName
         UploadResponseBody:
             type: object
             properties:

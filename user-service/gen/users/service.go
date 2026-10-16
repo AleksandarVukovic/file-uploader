@@ -58,6 +58,10 @@ type CreatePayload struct {
 	Email string
 	// The plaintext password; hashed by the service before storage
 	Password string
+	// The first name of the new user
+	FirstName string
+	// The last name of the new user
+	LastName string
 }
 
 // GetByUsernamePayload is the payload type of the users service getByUsername
@@ -79,6 +83,10 @@ type User struct {
 	CreatedAt string
 	// The timestamp when the user was last updated
 	UpdatedAt string
+	// The first name of the user
+	FirstName string
+	// The last name of the user
+	LastName string
 }
 
 // MakeBadRequest builds a goa.ServiceError from an error.
@@ -136,6 +144,12 @@ func newUser(vres *usersviews.UserView) *User {
 	if vres.UpdatedAt != nil {
 		res.UpdatedAt = *vres.UpdatedAt
 	}
+	if vres.FirstName != nil {
+		res.FirstName = *vres.FirstName
+	}
+	if vres.LastName != nil {
+		res.LastName = *vres.LastName
+	}
 	return res
 }
 
@@ -148,6 +162,8 @@ func newUserView(res *User) *usersviews.UserView {
 		Email:     &res.Email,
 		CreatedAt: &res.CreatedAt,
 		UpdatedAt: &res.UpdatedAt,
+		FirstName: &res.FirstName,
+		LastName:  &res.LastName,
 	}
 	return vres
 }

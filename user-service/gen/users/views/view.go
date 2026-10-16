@@ -8,7 +8,11 @@
 
 package views
 
-import goa "goa.design/goa/v3/pkg"
+import (
+	"unicode/utf8"
+
+	goa "goa.design/goa/v3/pkg"
+)
 
 // User is the viewed result type that is projected based on a view.
 type User struct {
@@ -30,6 +34,10 @@ type UserView struct {
 	CreatedAt *string
 	// The timestamp when the user was last updated
 	UpdatedAt *string
+	// The first name of the user
+	FirstName *string
+	// The last name of the user
+	LastName *string
 }
 
 var (
@@ -41,6 +49,8 @@ var (
 			"email",
 			"createdAt",
 			"updatedAt",
+			"firstName",
+			"lastName",
 		},
 	}
 )
@@ -68,6 +78,12 @@ func ValidateUserView(result *UserView) (err error) {
 	if result.Email == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("email", "result"))
 	}
+	if result.FirstName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("firstName", "result"))
+	}
+	if result.LastName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("lastName", "result"))
+	}
 	if result.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("createdAt", "result"))
 	}
@@ -82,6 +98,22 @@ func ValidateUserView(result *UserView) (err error) {
 	}
 	if result.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("result.updatedAt", *result.UpdatedAt, goa.FormatDateTime))
+	}
+	if result.FirstName != nil {
+		if utf8.RuneCountInString(*result.FirstName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("result.firstName", *result.FirstName, utf8.RuneCountInString(*result.FirstName), 1, true))
+		}
+		if utf8.RuneCountInString(*result.FirstName) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("result.firstName", *result.FirstName, utf8.RuneCountInString(*result.FirstName), 100, false))
+		}
+	}
+	if result.LastName != nil {
+		if utf8.RuneCountInString(*result.LastName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("result.lastName", *result.LastName, utf8.RuneCountInString(*result.LastName), 1, true))
+		}
+		if utf8.RuneCountInString(*result.LastName) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("result.lastName", *result.LastName, utf8.RuneCountInString(*result.LastName), 100, false))
+		}
 	}
 	return
 }
