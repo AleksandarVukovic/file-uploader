@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/aleksandarv/file-uploader/common/logger"
+	"github.com/aleksandarv/file-uploader/common/messaging"
 	"github.com/aleksandarv/file-uploader/common/tls"
 	"github.com/aleksandarv/file-uploader/file-processing-service/internal/api"
 	"github.com/aleksandarv/file-uploader/file-processing-service/internal/objectstore"
@@ -28,6 +29,8 @@ import (
 	"github.com/wagslane/go-rabbitmq"
 )
 
+const brokerConfirmTimeout = 2 * time.Second
+
 func main() {
 	if err := run(); err != nil {
 		os.Exit(1)
@@ -36,15 +39,16 @@ func main() {
 
 func run() error {
 	var (
-		debug             bool
-		healthPort        int
-		s3BucketNames     string
-		s3Endpoint        string
-		tlsCACertFile     string
-		brokerURL         string
-		brokerFilesQueue  string
-		brokerTLSCertFile string
-		brokerTLSKeyFile  string
+		debug               bool
+		healthPort          int
+		s3BucketNames       string
+		s3Endpoint          string
+		tlsCACertFile       string
+		brokerURL           string
+		brokerFilesQueue    string
+		brokerUsersExchange string
+		brokerTLSCertFile   string
+		brokerTLSKeyFile    string
 	)
 	flag.BoolVar(&debug, "debug", false, "Enable debug mode with verbose logging")
 	flag.IntVar(&healthPort, "healthPort", 8080, "HTTP port for the health endpoint")
@@ -53,6 +57,7 @@ func run() error {
 	flag.StringVar(&tlsCACertFile, "tlsCACertFile", "", "Path to the CA certificate used to verify the RabbitMQ server certificate")
 	flag.StringVar(&brokerURL, "brokerURL", "", "RabbitMQ URL including the vhost (e.g. amqps://rabbitmq:5671/file-uploader)")
 	flag.StringVar(&brokerFilesQueue, "brokerFilesQueue", "q.file.uploaded", "RabbitMQ queue that file events are consumed from")
+	flag.StringVar(&brokerUsersExchange, "brokerUsersExchange", "ex.users", "RabbitMQ exchange that user events are published to")
 	flag.StringVar(&brokerTLSCertFile, "brokerTLSCertFile", "", "Path to the client certificate presented to RabbitMQ (its CN is the RabbitMQ user)")
 	flag.StringVar(&brokerTLSKeyFile, "brokerTLSKeyFile", "", "Path to the private key of the RabbitMQ client certificate")
 	loadFlagsFromEnv()
@@ -93,8 +98,6 @@ func run() error {
 		return err
 	}
 
-	processorSvc := processor.New(log, objectstore.NewS3(bucketNames, s3Client))
-
 	brokerTLSCfg, err := tls.NewClientConfig(brokerTLSCertFile, brokerTLSKeyFile, tlsCACertFile)
 	if err != nil {
 		log.Error("failed to build broker TLS config", "err", err)
@@ -112,6 +115,19 @@ func run() error {
 		return err
 	}
 	defer brokerConn.Close()
+	brokerPub, err := rabbitmq.NewPublisher(brokerConn, rabbitmq.WithPublisherOptionsConfirm)
+	if err != nil {
+		log.Error("failed to create broker publisher", "err", err)
+		return err
+	}
+	defer brokerPub.Close()
+
+	processorSvc := processor.New(
+		log,
+		objectstore.NewS3(bucketNames, s3Client),
+		messaging.NewRabbitMQPublisher(brokerPub, brokerUsersExchange, brokerConfirmTimeout),
+	)
+
 	hostname, err := os.Hostname()
 	if err != nil {
 		log.Error("failed to get hostname", "err", err)
@@ -202,15 +218,16 @@ func isPlainHTTP(endpoint string) bool {
 
 func loadFlagsFromEnv() {
 	envToFlag := map[string]string{
-		"DEBUG":                "debug",
-		"HEALTH_PORT":          "healthPort",
-		"S3_BUCKET_NAMES":      "bucketNames",
-		"S3_ENDPOINT":          "s3Endpoint",
-		"TLS_CA_CERT_FILE":     "tlsCACertFile",
-		"BROKER_URL":           "brokerURL",
-		"BROKER_FILES_QUEUE":   "brokerFilesQueue",
-		"BROKER_TLS_CERT_FILE": "brokerTLSCertFile",
-		"BROKER_TLS_KEY_FILE":  "brokerTLSKeyFile",
+		"DEBUG":                 "debug",
+		"HEALTH_PORT":           "healthPort",
+		"S3_BUCKET_NAMES":       "bucketNames",
+		"S3_ENDPOINT":           "s3Endpoint",
+		"TLS_CA_CERT_FILE":      "tlsCACertFile",
+		"BROKER_URL":            "brokerURL",
+		"BROKER_FILES_QUEUE":    "brokerFilesQueue",
+		"BROKER_USERS_EXCHANGE": "brokerUsersExchange",
+		"BROKER_TLS_CERT_FILE":  "brokerTLSCertFile",
+		"BROKER_TLS_KEY_FILE":   "brokerTLSKeyFile",
 	}
 	for env, flagName := range envToFlag {
 		if val := os.Getenv(env); val != "" {
