@@ -35,6 +35,8 @@ func NewGetByUsernameResult(message *userspb.GetByUsernameResponse) *usersviews.
 		Email:     message.Email,
 		CreatedAt: message.CreatedAt,
 		UpdatedAt: message.UpdatedAt,
+		FirstName: message.FirstName,
+		LastName:  message.LastName,
 	}
 	return result
 }
@@ -43,9 +45,11 @@ func NewGetByUsernameResult(message *userspb.GetByUsernameResponse) *usersviews.
 // *users.CreatePayload.
 func NewProtoCreateRequest(payload *users.CreatePayload) *userspb.CreateRequest {
 	message := &userspb.CreateRequest{
-		Username: &payload.Username,
-		Email:    &payload.Email,
-		Password: &payload.Password,
+		Username:  &payload.Username,
+		Email:     &payload.Email,
+		Password:  &payload.Password,
+		FirstName: &payload.FirstName,
+		LastName:  &payload.LastName,
 	}
 	return message
 }
@@ -58,6 +62,8 @@ func NewCreateResult(message *userspb.CreateResponse) *usersviews.UserView {
 		Email:     message.Email,
 		CreatedAt: message.CreatedAt,
 		UpdatedAt: message.UpdatedAt,
+		FirstName: message.FirstName,
+		LastName:  message.LastName,
 	}
 	return result
 }
@@ -81,6 +87,8 @@ func NewAuthenticateResult(message *userspb.AuthenticateResponse) *usersviews.Us
 		Email:     message.Email,
 		CreatedAt: message.CreatedAt,
 		UpdatedAt: message.UpdatedAt,
+		FirstName: message.FirstName,
+		LastName:  message.LastName,
 	}
 	return result
 }
@@ -121,6 +129,12 @@ func ValidateGetByUsernameResponse(message *userspb.GetByUsernameResponse) (err 
 	if message.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updatedAt", "message"))
 	}
+	if message.FirstName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("firstName", "message"))
+	}
+	if message.LastName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("lastName", "message"))
+	}
 	if message.Email != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("message.email", *message.Email, goa.FormatEmail))
 	}
@@ -129,6 +143,22 @@ func ValidateGetByUsernameResponse(message *userspb.GetByUsernameResponse) (err 
 	}
 	if message.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("message.updatedAt", *message.UpdatedAt, goa.FormatDateTime))
+	}
+	if message.FirstName != nil {
+		if utf8.RuneCountInString(*message.FirstName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("message.firstName", *message.FirstName, utf8.RuneCountInString(*message.FirstName), 1, true))
+		}
+		if utf8.RuneCountInString(*message.FirstName) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("message.firstName", *message.FirstName, utf8.RuneCountInString(*message.FirstName), 100, false))
+		}
+	}
+	if message.LastName != nil {
+		if utf8.RuneCountInString(*message.LastName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("message.lastName", *message.LastName, utf8.RuneCountInString(*message.LastName), 1, true))
+		}
+		if utf8.RuneCountInString(*message.LastName) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("message.lastName", *message.LastName, utf8.RuneCountInString(*message.LastName), 100, false))
+		}
 	}
 	return
 }
@@ -143,6 +173,12 @@ func ValidateCreateRequest(message *userspb.CreateRequest) (err error) {
 	}
 	if message.Password == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("password", "message"))
+	}
+	if message.FirstName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("firstName", "message"))
+	}
+	if message.LastName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("lastName", "message"))
 	}
 	if message.Username != nil {
 		err = goa.MergeErrors(err, goa.ValidatePattern("message.username", *message.Username, "^[a-z][a-z0-9_]*$"))
@@ -165,6 +201,22 @@ func ValidateCreateRequest(message *userspb.CreateRequest) (err error) {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("message.password", *message.Password, utf8.RuneCountInString(*message.Password), 72, false))
 		}
 	}
+	if message.FirstName != nil {
+		if utf8.RuneCountInString(*message.FirstName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("message.firstName", *message.FirstName, utf8.RuneCountInString(*message.FirstName), 1, true))
+		}
+		if utf8.RuneCountInString(*message.FirstName) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("message.firstName", *message.FirstName, utf8.RuneCountInString(*message.FirstName), 100, false))
+		}
+	}
+	if message.LastName != nil {
+		if utf8.RuneCountInString(*message.LastName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("message.lastName", *message.LastName, utf8.RuneCountInString(*message.LastName), 1, true))
+		}
+		if utf8.RuneCountInString(*message.LastName) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("message.lastName", *message.LastName, utf8.RuneCountInString(*message.LastName), 100, false))
+		}
+	}
 	return
 }
 
@@ -185,6 +237,12 @@ func ValidateCreateResponse(message *userspb.CreateResponse) (err error) {
 	if message.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updatedAt", "message"))
 	}
+	if message.FirstName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("firstName", "message"))
+	}
+	if message.LastName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("lastName", "message"))
+	}
 	if message.Email != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("message.email", *message.Email, goa.FormatEmail))
 	}
@@ -193,6 +251,22 @@ func ValidateCreateResponse(message *userspb.CreateResponse) (err error) {
 	}
 	if message.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("message.updatedAt", *message.UpdatedAt, goa.FormatDateTime))
+	}
+	if message.FirstName != nil {
+		if utf8.RuneCountInString(*message.FirstName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("message.firstName", *message.FirstName, utf8.RuneCountInString(*message.FirstName), 1, true))
+		}
+		if utf8.RuneCountInString(*message.FirstName) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("message.firstName", *message.FirstName, utf8.RuneCountInString(*message.FirstName), 100, false))
+		}
+	}
+	if message.LastName != nil {
+		if utf8.RuneCountInString(*message.LastName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("message.lastName", *message.LastName, utf8.RuneCountInString(*message.LastName), 1, true))
+		}
+		if utf8.RuneCountInString(*message.LastName) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("message.lastName", *message.LastName, utf8.RuneCountInString(*message.LastName), 100, false))
+		}
 	}
 	return
 }
@@ -244,6 +318,12 @@ func ValidateAuthenticateResponse(message *userspb.AuthenticateResponse) (err er
 	if message.UpdatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("updatedAt", "message"))
 	}
+	if message.FirstName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("firstName", "message"))
+	}
+	if message.LastName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("lastName", "message"))
+	}
 	if message.Email != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("message.email", *message.Email, goa.FormatEmail))
 	}
@@ -252,6 +332,22 @@ func ValidateAuthenticateResponse(message *userspb.AuthenticateResponse) (err er
 	}
 	if message.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("message.updatedAt", *message.UpdatedAt, goa.FormatDateTime))
+	}
+	if message.FirstName != nil {
+		if utf8.RuneCountInString(*message.FirstName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("message.firstName", *message.FirstName, utf8.RuneCountInString(*message.FirstName), 1, true))
+		}
+		if utf8.RuneCountInString(*message.FirstName) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("message.firstName", *message.FirstName, utf8.RuneCountInString(*message.FirstName), 100, false))
+		}
+	}
+	if message.LastName != nil {
+		if utf8.RuneCountInString(*message.LastName) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("message.lastName", *message.LastName, utf8.RuneCountInString(*message.LastName), 1, true))
+		}
+		if utf8.RuneCountInString(*message.LastName) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("message.lastName", *message.LastName, utf8.RuneCountInString(*message.LastName), 100, false))
+		}
 	}
 	return
 }

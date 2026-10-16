@@ -18,9 +18,11 @@ import (
 )
 
 const (
-	testUsername = "john_doe"
-	testEmail    = "john.doe@example.com"
-	testPassword = "Correct-Horse-42"
+	testUsername  = "john_doe"
+	testEmail     = "john.doe@example.com"
+	testFirstName = "John"
+	testLastName  = "Doe"
+	testPassword  = "Correct-Horse-42"
 )
 
 var (
@@ -54,6 +56,8 @@ func storedUser(t *testing.T) userssvc.User {
 		ID:           9,
 		Username:     testUsername,
 		Email:        testEmail,
+		FirstName:    testFirstName,
+		LastName:     testLastName,
 		PasswordHash: string(hash),
 		CreatedAt:    testCreatedAt,
 		UpdatedAt:    testUpdatedAt,
@@ -103,6 +107,8 @@ func TestUsersHandler_GetByUsername(t *testing.T) {
 				ID:        9,
 				Username:  testUsername,
 				Email:     testEmail,
+				FirstName: testFirstName,
+				LastName:  testLastName,
 				CreatedAt: "2023-01-01T12:00:00Z",
 				UpdatedAt: "2023-01-02T10:00:00Z",
 			}, got)
@@ -111,7 +117,15 @@ func TestUsersHandler_GetByUsername(t *testing.T) {
 }
 
 func TestUsersHandler_Create(t *testing.T) {
-	created := userssvc.User{ID: 1, Username: testUsername, Email: testEmail, CreatedAt: testCreatedAt, UpdatedAt: testCreatedAt}
+	created := userssvc.User{
+		ID:        1,
+		Username:  testUsername,
+		Email:     testEmail,
+		FirstName: testFirstName,
+		LastName:  testLastName,
+		CreatedAt: testCreatedAt,
+		UpdatedAt: testCreatedAt,
+	}
 
 	tests := []struct {
 		name      string
@@ -132,9 +146,11 @@ func TestUsersHandler_Create(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := newHandler(tt.repo).Create(testCtx(), &users.CreatePayload{
-				Username: tt.username,
-				Email:    testEmail,
-				Password: tt.password,
+				Username:  tt.username,
+				Email:     testEmail,
+				FirstName: testFirstName,
+				LastName:  testLastName,
+				Password:  tt.password,
 			})
 
 			if tt.untouched {
@@ -148,7 +164,12 @@ func TestUsersHandler_Create(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, testUsername, got.Username)
 			require.Equal(t, testEmail, got.Email)
+			require.Equal(t, testFirstName, got.FirstName)
+			require.Equal(t, testLastName, got.LastName)
 			require.Equal(t, "2023-01-01T12:00:00Z", got.CreatedAt)
+			tt.repo.AssertCalled(t, "Create", mock.Anything, mock.MatchedBy(func(u userssvc.User) bool {
+				return u.FirstName == testFirstName && u.LastName == testLastName
+			}))
 		})
 	}
 }

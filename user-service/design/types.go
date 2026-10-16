@@ -24,6 +24,16 @@ var User = ResultType("application/vnd.user", "User", func() {
 			Format(FormatDateTime)
 			Example("2023-01-02T12:00:00Z")
 		})
-		Required("id", "username", "email", "createdAt", "updatedAt")
+		Field(6, "firstName", String, "The first name of the user", func() {
+			MinLength(1)
+			MaxLength(100)
+			Example("John")
+		})
+		Field(7, "lastName", String, "The last name of the user", func() {
+			MinLength(1)
+			MaxLength(100)
+			Example("Doe")
+		})
+		Required("id", "username", "email", "firstName", "lastName", "createdAt", "updatedAt")
 	})
 })

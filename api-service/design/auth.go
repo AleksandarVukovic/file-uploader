@@ -57,13 +57,23 @@ var _ = Service("auth", func() {
 				Format(FormatEmail)
 				Example("john.doe@example.com")
 			})
+			Attribute("firstName", String, "First name of the new user", func() {
+				MinLength(1)
+				MaxLength(100)
+				Example("John")
+			})
+			Attribute("lastName", String, "Last name of the new user", func() {
+				MinLength(1)
+				MaxLength(100)
+				Example("Doe")
+			})
 			Attribute("password", String, "Password of the new user", func() {
 				MinLength(8)
 				MaxLength(72)
 				Pattern(`^[\x21-\x7E]+$`)
 				Example("Correct-Horse-42")
 			})
-			Required("username", "email", "password")
+			Required("username", "email", "firstName", "lastName", "password")
 		})
 
 		Result(func() {
@@ -76,7 +86,13 @@ var _ = Service("auth", func() {
 			Attribute("email", String, "Email address of the new user", func() {
 				Example("john.doe@example.com")
 			})
-			Required("id", "username", "email")
+			Attribute("firstName", String, "First name of the new user", func() {
+				Example("John")
+			})
+			Attribute("lastName", String, "Last name of the new user", func() {
+				Example("Doe")
+			})
+			Required("id", "username", "email", "firstName", "lastName")
 		})
 
 		Error("invalid_input", ErrorResult, "The user data was rejected.")

@@ -22,9 +22,11 @@ var (
 )
 
 type User struct {
-	ID       int64
-	Username string
-	Email    string
+	ID        int64
+	Username  string
+	Email     string
+	FirstName string
+	LastName  string
 }
 
 type Client struct {
@@ -54,17 +56,25 @@ func (c *Client) Authenticate(ctx context.Context, username, password string) (U
 		}
 	}
 
-	return User{ID: res.GetId(), Username: res.GetUsername(), Email: res.GetEmail()}, nil
+	return User{
+		ID:        res.GetId(),
+		Username:  res.GetUsername(),
+		Email:     res.GetEmail(),
+		FirstName: res.GetFirstName(),
+		LastName:  res.GetLastName(),
+	}, nil
 }
 
-func (c *Client) Create(ctx context.Context, username, email, password string) (User, error) {
+func (c *Client) Create(ctx context.Context, username, email, firstName, lastName, password string) (User, error) {
 	ctx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
 
 	res, err := c.users.Create(ctx, &userspb.CreateRequest{
-		Username: &username,
-		Email:    &email,
-		Password: &password,
+		Username:  &username,
+		Email:     &email,
+		FirstName: &firstName,
+		LastName:  &lastName,
+		Password:  &password,
 	})
 	if err != nil {
 		switch status.Code(err) {
@@ -79,5 +89,11 @@ func (c *Client) Create(ctx context.Context, username, email, password string) (
 		}
 	}
 
-	return User{ID: res.GetId(), Username: res.GetUsername(), Email: res.GetEmail()}, nil
+	return User{
+		ID:        res.GetId(),
+		Username:  res.GetUsername(),
+		Email:     res.GetEmail(),
+		FirstName: res.GetFirstName(),
+		LastName:  res.GetLastName(),
+	}, nil
 }

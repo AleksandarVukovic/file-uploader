@@ -39,6 +39,8 @@ func (r *repository) Create(ctx context.Context, user users.User) (users.User, e
 	u, err := r.queries.CreateUser(ctx, sqlc.CreateUserParams{
 		Username:     user.Username,
 		Email:        user.Email,
+		FirstName:    user.FirstName,
+		LastName:     user.LastName,
 		PasswordHash: user.PasswordHash,
 	})
 	var pgErr *pgconn.PgError
@@ -61,6 +63,8 @@ func toUser(u sqlc.User) users.User {
 		ID:           u.ID,
 		Username:     u.Username,
 		Email:        u.Email,
+		FirstName:    u.FirstName,
+		LastName:     u.LastName,
 		PasswordHash: u.PasswordHash,
 		CreatedAt:    u.CreatedAt.Time,
 		UpdatedAt:    u.UpdatedAt.Time,

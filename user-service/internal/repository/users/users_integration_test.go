@@ -92,7 +92,13 @@ func newTestRepo(t *testing.T) users.Repository {
 }
 
 func newUser(username, email string) users.User {
-	return users.User{Username: username, Email: email, PasswordHash: "$2a$10$hash"}
+	return users.User{Username: username, Email: email, FirstName: "John", LastName: "Doe", PasswordHash: "$2a$10$hash"}
+}
+
+func withNames(u users.User, firstName, lastName string) users.User {
+	u.FirstName = firstName
+	u.LastName = lastName
+	return u
 }
 
 func TestRepositoryDB_CreateThenGetByUsername(t *testing.T) {
@@ -105,6 +111,8 @@ func TestRepositoryDB_CreateThenGetByUsername(t *testing.T) {
 	require.Equal(t, int64(1), created.ID)
 	require.Equal(t, "john_doe", created.Username)
 	require.Equal(t, "john.doe@example.com", created.Email)
+	require.Equal(t, "John", created.FirstName)
+	require.Equal(t, "Doe", created.LastName)
 	require.Equal(t, "$2a$10$hash", created.PasswordHash)
 	require.WithinDuration(t, time.Now(), created.CreatedAt, time.Minute)
 	require.Equal(t, created.CreatedAt, created.UpdatedAt)
@@ -169,6 +177,8 @@ func TestRepositoryDB_Create_SchemaConstraints(t *testing.T) {
 		{"uppercase username violates check constraint", newUser("John", "john@example.com"), "23514"},
 		{"username longer than 50 characters", newUser(strings.Repeat("a", 51), "long@example.com"), "22001"},
 		{"email longer than 254 characters", newUser("long_email", strings.Repeat("a", 250)+"@x.com"), "22001"},
+		{"first name longer than 100 characters", withNames(newUser("long_first", "first@example.com"), strings.Repeat("a", 101), "Doe"), "22001"},
+		{"last name longer than 100 characters", withNames(newUser("long_last", "last@example.com"), "John", strings.Repeat("a", 101)), "22001"},
 	}
 
 	for _, tt := range tests {

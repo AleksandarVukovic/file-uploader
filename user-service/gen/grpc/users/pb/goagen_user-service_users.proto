@@ -38,6 +38,10 @@ message GetByUsernameResponse {
 	optional string created_at = 4;
 	// The timestamp when the user was last updated
 	optional string updated_at = 5;
+	// The first name of the user
+	optional string first_name = 6;
+	// The last name of the user
+	optional string last_name = 7;
 }
 
 message CreateRequest {
@@ -47,6 +51,10 @@ message CreateRequest {
 	optional string email = 2;
 	// The plaintext password; hashed by the service before storage
 	optional string password = 3;
+	// The first name of the new user
+	optional string first_name = 4;
+	// The last name of the new user
+	optional string last_name = 5;
 }
 
 message CreateResponse {
@@ -60,6 +68,10 @@ message CreateResponse {
 	optional string created_at = 4;
 	// The timestamp when the user was last updated
 	optional string updated_at = 5;
+	// The first name of the user
+	optional string first_name = 6;
+	// The last name of the user
+	optional string last_name = 7;
 }
 
 message AuthenticateRequest {
@@ -80,4 +92,8 @@ message AuthenticateResponse {
 	optional string created_at = 4;
 	// The timestamp when the user was last updated
 	optional string updated_at = 5;
+	// The first name of the user
+	optional string first_name = 6;
+	// The last name of the user
+	optional string last_name = 7;
 }

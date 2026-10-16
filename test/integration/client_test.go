@@ -52,8 +52,14 @@ func login(username, password string) (*http.Response, error) {
 	return http.DefaultClient.Do(req)
 }
 
-func register(username, email, password string) (*http.Response, error) {
-	payload, err := json.Marshal(map[string]string{"username": username, "email": email, "password": password})
+func register(username, email, firstName, lastName, password string) (*http.Response, error) {
+	payload, err := json.Marshal(map[string]string{
+		"username":  username,
+		"email":     email,
+		"firstName": firstName,
+		"lastName":  lastName,
+		"password":  password,
+	})
 	if err != nil {
 		return nil, err
 	}

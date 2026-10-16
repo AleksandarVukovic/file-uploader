@@ -4,6 +4,7 @@ package api
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	userspb "github.com/aleksandarv/file-uploader/user-service/gen/grpc/users/pb"
@@ -66,18 +67,26 @@ func TestUsersGRPC_Create_EnforcesDesignValidation(t *testing.T) {
 	client := newGRPCClient(t, returning(storedUser(t), nil))
 
 	tests := []struct {
-		name     string
-		username string
-		email    string
-		password string
+		name      string
+		username  string
+		email     string
+		firstName *string
+		lastName  *string
+		password  string
 	}{
-		{"uppercase username", "John", testEmail, testPassword},
-		{"username starting with digit", "1john", testEmail, testPassword},
-		{"short username", "jo", testEmail, testPassword},
-		{"invalid email", testUsername, "not-an-email", testPassword},
-		{"short password", testUsername, testEmail, "Ab1!"},
-		{"password with emoji", testUsername, testEmail, "Correct-Horse-42😀"},
-		{"password with space", testUsername, testEmail, "Correct Horse 42"},
+		{"uppercase username", "John", testEmail, strPtr(testFirstName), strPtr(testLastName), testPassword},
+		{"username starting with digit", "1john", testEmail, strPtr(testFirstName), strPtr(testLastName), testPassword},
+		{"short username", "jo", testEmail, strPtr(testFirstName), strPtr(testLastName), testPassword},
+		{"invalid email", testUsername, "not-an-email", strPtr(testFirstName), strPtr(testLastName), testPassword},
+		{"short password", testUsername, testEmail, strPtr(testFirstName), strPtr(testLastName), "Ab1!"},
+		{"password with emoji", testUsername, testEmail, strPtr(testFirstName), strPtr(testLastName), "Correct-Horse-42😀"},
+		{"password with space", testUsername, testEmail, strPtr(testFirstName), strPtr(testLastName), "Correct Horse 42"},
+		{"missing first name", testUsername, testEmail, nil, strPtr(testLastName), testPassword},
+		{"missing last name", testUsername, testEmail, strPtr(testFirstName), nil, testPassword},
+		{"empty first name", testUsername, testEmail, strPtr(""), strPtr(testLastName), testPassword},
+		{"empty last name", testUsername, testEmail, strPtr(testFirstName), strPtr(""), testPassword},
+		{"first name longer than 100 characters", testUsername, testEmail, strPtr(strings.Repeat("a", 101)), strPtr(testLastName), testPassword},
+		{"last name longer than 100 characters", testUsername, testEmail, strPtr(testFirstName), strPtr(strings.Repeat("a", 101)), testPassword},
 	}
 
 	for _, tt := range tests {
@@ -85,9 +94,11 @@ func TestUsersGRPC_Create_EnforcesDesignValidation(t *testing.T) {
 			t.Parallel()
 
 			_, err := client.Create(context.Background(), &userspb.CreateRequest{
-				Username: strPtr(tt.username),
-				Email:    strPtr(tt.email),
-				Password: strPtr(tt.password),
+				Username:  strPtr(tt.username),
+				Email:     strPtr(tt.email),
+				FirstName: tt.firstName,
+				LastName:  tt.lastName,
+				Password:  strPtr(tt.password),
 			})
 
 			require.Equal(t, codes.InvalidArgument, status.Code(err), "err: %v", err)
@@ -101,12 +112,32 @@ func TestUsersGRPC_Create_Conflict(t *testing.T) {
 	client := newGRPCClient(t, returning(userssvc.User{}, userssvc.ErrUsernameTaken))
 
 	_, err := client.Create(context.Background(), &userspb.CreateRequest{
-		Username: strPtr(testUsername),
-		Email:    strPtr(testEmail),
-		Password: strPtr(testPassword),
+		Username:  strPtr(testUsername),
+		Email:     strPtr(testEmail),
+		FirstName: strPtr(testFirstName),
+		LastName:  strPtr(testLastName),
+		Password:  strPtr(testPassword),
 	})
 
 	require.Equal(t, codes.AlreadyExists, status.Code(err))
+}
+
+func TestUsersGRPC_Create_ReturnsNames(t *testing.T) {
+	t.Parallel()
+
+	client := newGRPCClient(t, returning(storedUser(t), nil))
+
+	res, err := client.Create(context.Background(), &userspb.CreateRequest{
+		Username:  strPtr(testUsername),
+		Email:     strPtr(testEmail),
+		FirstName: strPtr(testFirstName),
+		LastName:  strPtr(testLastName),
+		Password:  strPtr(testPassword),
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, testFirstName, res.GetFirstName())
+	require.Equal(t, testLastName, res.GetLastName())
 }
 
 func TestUsersGRPC_GetByUsername_NotFound(t *testing.T) {

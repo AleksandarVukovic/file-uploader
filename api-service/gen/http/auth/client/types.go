@@ -29,6 +29,10 @@ type RegisterRequestBody struct {
 	Username string `form:"username" json:"username" xml:"username"`
 	// Email address of the new user
 	Email string `form:"email" json:"email" xml:"email"`
+	// First name of the new user
+	FirstName string `form:"firstName" json:"firstName" xml:"firstName"`
+	// Last name of the new user
+	LastName string `form:"lastName" json:"lastName" xml:"lastName"`
 	// Password of the new user
 	Password string `form:"password" json:"password" xml:"password"`
 }
@@ -49,6 +53,10 @@ type RegisterResponseBody struct {
 	Username *string `form:"username,omitempty" json:"username,omitempty" xml:"username,omitempty"`
 	// Email address of the new user
 	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
+	// First name of the new user
+	FirstName *string `form:"firstName,omitempty" json:"firstName,omitempty" xml:"firstName,omitempty"`
+	// Last name of the new user
+	LastName *string `form:"lastName,omitempty" json:"lastName,omitempty" xml:"lastName,omitempty"`
 }
 
 // LoginInvalidCredentialsResponseBody is the type of the "auth" service
@@ -191,9 +199,11 @@ func NewLoginRequestBody(p *auth.LoginPayload) *LoginRequestBody {
 // "register" endpoint of the "auth" service.
 func NewRegisterRequestBody(p *auth.RegisterPayload) *RegisterRequestBody {
 	body := &RegisterRequestBody{
-		Username: p.Username,
-		Email:    p.Email,
-		Password: p.Password,
+		Username:  p.Username,
+		Email:     p.Email,
+		FirstName: p.FirstName,
+		LastName:  p.LastName,
+		Password:  p.Password,
 	}
 	return body
 }
@@ -256,9 +266,11 @@ func NewLoginInternalError(body *LoginInternalErrorResponseBody) *goa.ServiceErr
 // from a HTTP "Created" response.
 func NewRegisterResultCreated(body *RegisterResponseBody) *auth.RegisterResult {
 	v := &auth.RegisterResult{
-		ID:       *body.ID,
-		Username: *body.Username,
-		Email:    *body.Email,
+		ID:        *body.ID,
+		Username:  *body.Username,
+		Email:     *body.Email,
+		FirstName: *body.FirstName,
+		LastName:  *body.LastName,
 	}
 
 	return v
@@ -343,6 +355,12 @@ func ValidateRegisterResponseBody(body *RegisterResponseBody) (err error) {
 	}
 	if body.Email == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("email", "body"))
+	}
+	if body.FirstName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("firstName", "body"))
+	}
+	if body.LastName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("lastName", "body"))
 	}
 	return
 }

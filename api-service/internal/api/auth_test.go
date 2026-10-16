@@ -28,8 +28,8 @@ func (m *mockUserService) Authenticate(ctx context.Context, username, password s
 	return args.Get(0).(userservice.User), args.Error(1)
 }
 
-func (m *mockUserService) Create(ctx context.Context, username, email, password string) (userservice.User, error) {
-	args := m.Called(ctx, username, email, password)
+func (m *mockUserService) Create(ctx context.Context, username, email, firstName, lastName, password string) (userservice.User, error) {
+	args := m.Called(ctx, username, email, firstName, lastName, password)
 	return args.Get(0).(userservice.User), args.Error(1)
 }
 
@@ -122,18 +122,28 @@ func TestAuthHandler_Login_UserServiceFailures(t *testing.T) {
 }
 
 func TestAuthHandler_Register(t *testing.T) {
-	const testEmail = "john.doe@example.com"
-	payload := &auth.RegisterPayload{Username: testUsername, Email: testEmail, Password: testPassword}
+	const (
+		testEmail     = "john.doe@example.com"
+		testFirstName = "John"
+		testLastName  = "Doe"
+	)
+	payload := &auth.RegisterPayload{
+		Username:  testUsername,
+		Email:     testEmail,
+		FirstName: testFirstName,
+		LastName:  testLastName,
+		Password:  testPassword,
+	}
 
 	t.Run("returns the created user", func(t *testing.T) {
 		users := &mockUserService{}
-		users.On("Create", mock.Anything, testUsername, testEmail, testPassword).
-			Return(userservice.User{ID: 5, Username: testUsername, Email: testEmail}, nil)
+		users.On("Create", mock.Anything, testUsername, testEmail, testFirstName, testLastName, testPassword).
+			Return(userservice.User{ID: 5, Username: testUsername, Email: testEmail, FirstName: testFirstName, LastName: testLastName}, nil)
 
 		res, err := NewAuthHandler([]byte("test-secret"), users).Register(testCtx(), payload)
 
 		require.NoError(t, err)
-		require.Equal(t, &auth.RegisterResult{ID: 5, Username: testUsername, Email: testEmail}, res)
+		require.Equal(t, &auth.RegisterResult{ID: 5, Username: testUsername, Email: testEmail, FirstName: testFirstName, LastName: testLastName}, res)
 		users.AssertExpectations(t)
 	})
 
@@ -150,7 +160,7 @@ func TestAuthHandler_Register(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			users := &mockUserService{}
-			users.On("Create", mock.Anything, testUsername, testEmail, testPassword).
+			users.On("Create", mock.Anything, testUsername, testEmail, testFirstName, testLastName, testPassword).
 				Return(userservice.User{}, tt.err)
 
 			res, err := NewAuthHandler([]byte("test-secret"), users).Register(testCtx(), payload)

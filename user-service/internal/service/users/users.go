@@ -37,6 +37,8 @@ type User struct {
 	ID           int64
 	Username     string
 	Email        string
+	FirstName    string
+	LastName     string
 	PasswordHash string
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
@@ -59,7 +61,7 @@ func (s *Service) GetByUsername(ctx context.Context, username string) (User, err
 	return s.repo.GetByUsername(ctx, username)
 }
 
-func (s *Service) Create(ctx context.Context, username, email, password string) (User, error) {
+func (s *Service) Create(ctx context.Context, username, email, firstName, lastName, password string) (User, error) {
 	if _, reserved := reservedUsernames[username]; reserved {
 		return User{}, ErrReservedUsername
 	}
@@ -75,6 +77,8 @@ func (s *Service) Create(ctx context.Context, username, email, password string) 
 	return s.repo.Create(ctx, User{
 		Username:     username,
 		Email:        email,
+		FirstName:    firstName,
+		LastName:     lastName,
 		PasswordHash: string(hash),
 	})
 }
