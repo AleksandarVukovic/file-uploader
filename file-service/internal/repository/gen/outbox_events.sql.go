@@ -11,6 +11,47 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getUnpublishedEvents = `-- name: GetUnpublishedEvents :many
+SELECT id, aggregate_type, aggregate_id, event_type, payload, created_at, published_at FROM outbox_events
+WHERE published_at IS NULL AND aggregate_type = $1
+ORDER BY created_at
+LIMIT $2
+FOR UPDATE SKIP LOCKED
+`
+
+type GetUnpublishedEventsParams struct {
+	AggregateType string
+	Limit         int32
+}
+
+func (q *Queries) GetUnpublishedEvents(ctx context.Context, arg GetUnpublishedEventsParams) ([]OutboxEvent, error) {
+	rows, err := q.db.Query(ctx, getUnpublishedEvents, arg.AggregateType, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OutboxEvent
+	for rows.Next() {
+		var i OutboxEvent
+		if err := rows.Scan(
+			&i.ID,
+			&i.AggregateType,
+			&i.AggregateID,
+			&i.EventType,
+			&i.Payload,
+			&i.CreatedAt,
+			&i.PublishedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertEvent = `-- name: InsertEvent :one
 INSERT INTO outbox_events (id, aggregate_type, aggregate_id, event_type, payload)
 VALUES ($1, $2, $3, $4, $5)
@@ -44,4 +85,15 @@ func (q *Queries) InsertEvent(ctx context.Context, arg InsertEventParams) (Outbo
 		&i.PublishedAt,
 	)
 	return i, err
+}
+
+const markEventPublished = `-- name: MarkEventPublished :exec
+UPDATE outbox_events
+SET published_at = now()
+WHERE id = $1 AND published_at IS NULL
+`
+
+func (q *Queries) MarkEventPublished(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, markEventPublished, id)
+	return err
 }

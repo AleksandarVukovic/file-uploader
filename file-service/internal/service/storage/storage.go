@@ -11,6 +11,7 @@ import (
 
 	"github.com/aleksandarv/file-uploader/common/events"
 	"github.com/aleksandarv/file-uploader/common/logger"
+	"github.com/aleksandarv/file-uploader/file-service/internal/outbox"
 	"github.com/google/uuid"
 )
 
@@ -84,23 +85,11 @@ type File struct {
 	UpdatedAt      time.Time
 }
 
-type OutboxEvent struct {
-	ID            string // UUID
-	AggregateType string
-	AggregateID   string
-	EventType     string
-	Payload       []byte // JSON
-}
-
 type Repository interface {
 	Insert(ctx context.Context, file File) (File, error)
 	UpdateStatus(ctx context.Context, id string, status Status) (File, error)
 	Delete(ctx context.Context, id string) error
 	GetPendingFilesOlderThan(ctx context.Context, after, before time.Time) ([]File, error)
-}
-
-type OutboxRepository interface {
-	Insert(ctx context.Context, event OutboxEvent) error
 }
 
 type Transactor interface {
@@ -110,14 +99,14 @@ type Transactor interface {
 type service struct {
 	objectStore    ObjectStore
 	repo           Repository
-	outbox         OutboxRepository
+	outboxRepo     outbox.Repository
 	tx             Transactor
 	rootDir        string
 	pendingFileTTL time.Duration
 }
 
-func New(objectStore ObjectStore, repo Repository, outbox OutboxRepository, tx Transactor, rootDir string, pendingFileTTL time.Duration) Service {
-	return &service{objectStore: objectStore, repo: repo, outbox: outbox, tx: tx, rootDir: rootDir, pendingFileTTL: pendingFileTTL}
+func New(objectStore ObjectStore, repo Repository, outboxRepo outbox.Repository, tx Transactor, rootDir string, pendingFileTTL time.Duration) Service {
+	return &service{objectStore: objectStore, repo: repo, outboxRepo: outboxRepo, tx: tx, rootDir: rootDir, pendingFileTTL: pendingFileTTL}
 }
 
 func (s *service) Store(ctx context.Context, in StoreInput) (StoreResult, error) {
@@ -193,7 +182,7 @@ func (s *service) markUploaded(ctx context.Context, id string, file File) (File,
 		if err != nil {
 			return err
 		}
-		return s.outbox.Insert(txCtx, event)
+		return s.outboxRepo.Insert(txCtx, event)
 	})
 	if err != nil {
 		return File{}, err
@@ -201,7 +190,7 @@ func (s *service) markUploaded(ctx context.Context, id string, file File) (File,
 	return updated, nil
 }
 
-func newFileUploadedEvent(file File) (OutboxEvent, error) {
+func newFileUploadedEvent(file File) (outbox.Event, error) {
 	payload, err := json.Marshal(events.FileUploadedPayload{
 		FileID:      file.ID,
 		UserID:      file.UserID,
@@ -212,9 +201,9 @@ func newFileUploadedEvent(file File) (OutboxEvent, error) {
 		Checksum:    hex.EncodeToString(file.ChecksumSHA256),
 	})
 	if err != nil {
-		return OutboxEvent{}, err
+		return outbox.Event{}, err
 	}
-	return OutboxEvent{
+	return outbox.Event{
 		ID:            uuid.NewString(),
 		AggregateType: events.AggregateTypeFile,
 		AggregateID:   file.ID,

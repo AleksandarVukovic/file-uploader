@@ -15,6 +15,7 @@ import (
 	httpmiddleware "github.com/aleksandarv/file-uploader/common/http/middleware"
 	"github.com/aleksandarv/file-uploader/common/logger"
 	"github.com/aleksandarv/file-uploader/file-service/gen/files"
+	"github.com/aleksandarv/file-uploader/file-service/internal/outbox"
 	"github.com/aleksandarv/file-uploader/file-service/internal/service/storage"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/stretchr/testify/mock"
@@ -101,8 +102,18 @@ type mockOutbox struct {
 	mock.Mock
 }
 
-func (m *mockOutbox) Insert(ctx context.Context, event storage.OutboxEvent) error {
+func (m *mockOutbox) Insert(ctx context.Context, event outbox.Event) error {
 	args := m.Called(ctx, event)
+	return args.Error(0)
+}
+
+func (m *mockOutbox) GetUnpublished(ctx context.Context, aggregateType string, limit int) ([]outbox.Event, error) {
+	args := m.Called(ctx, aggregateType, limit)
+	return args.Get(0).([]outbox.Event), args.Error(1)
+}
+
+func (m *mockOutbox) MarkPublished(ctx context.Context, id string) error {
+	args := m.Called(ctx, id)
 	return args.Error(0)
 }
 
@@ -116,9 +127,9 @@ func (m *mockTransactor) WithinTx(ctx context.Context, txFunc func(txCtx context
 }
 
 func newAcceptingOutbox() *mockOutbox {
-	outbox := new(mockOutbox)
-	outbox.On("Insert", mock.Anything, mock.Anything).Return(nil)
-	return outbox
+	outboxRepo := new(mockOutbox)
+	outboxRepo.On("Insert", mock.Anything, mock.Anything).Return(nil)
+	return outboxRepo
 }
 
 func newPassthroughTransactor() *mockTransactor {
