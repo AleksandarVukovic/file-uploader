@@ -8,19 +8,25 @@
   ],
   "permissions": [
     { "user": "file-service", "vhost": "file-uploader", "configure": "", "write": "^ex\\.files$", "read": "" },
-    { "user": "file-processing-service", "vhost": "file-uploader", "configure": "", "write": "", "read": "^q\\.file\\.uploaded$" }
+    { "user": "file-processing-service", "vhost": "file-uploader", "configure": "", "write": "^ex\\.users$", "read": "^q\\.file\\.uploaded$" }
   ],
   "exchanges": [
     { "name": "ex.files", "vhost": "file-uploader", "type": "topic", "durable": true, "auto_delete": false, "internal": false, "arguments": {} },
-    { "name": "ex.files.dlx", "vhost": "file-uploader", "type": "fanout", "durable": true, "auto_delete": false, "internal": false, "arguments": {} }
+    { "name": "ex.files.dlx", "vhost": "file-uploader", "type": "fanout", "durable": true, "auto_delete": false, "internal": false, "arguments": {} },
+    { "name": "ex.users", "vhost": "file-uploader", "type": "topic", "durable": true, "auto_delete": false, "internal": false, "arguments": {} },
+    { "name": "ex.users.dlx", "vhost": "file-uploader", "type": "fanout", "durable": true, "auto_delete": false, "internal": false, "arguments": {} }
   ],
   "queues": [
     { "name": "q.file.uploaded", "vhost": "file-uploader", "durable": true, "auto_delete": false, "arguments": { "x-queue-type": "quorum" } },
-    { "name": "q.file.uploaded.dead", "vhost": "file-uploader", "durable": true, "auto_delete": false, "arguments": { "x-queue-type": "quorum" } }
+    { "name": "q.file.uploaded.dead", "vhost": "file-uploader", "durable": true, "auto_delete": false, "arguments": { "x-queue-type": "quorum" } },
+    { "name": "q.user.imported", "vhost": "file-uploader", "durable": true, "auto_delete": false, "arguments": { "x-queue-type": "quorum" } },
+    { "name": "q.user.imported.dead", "vhost": "file-uploader", "durable": true, "auto_delete": false, "arguments": { "x-queue-type": "quorum" } }
   ],
   "bindings": [
     { "source": "ex.files", "vhost": "file-uploader", "destination": "q.file.uploaded", "destination_type": "queue", "routing_key": "file.uploaded", "arguments": {} },
-    { "source": "ex.files.dlx", "vhost": "file-uploader", "destination": "q.file.uploaded.dead", "destination_type": "queue", "routing_key": "", "arguments": {} }
+    { "source": "ex.files.dlx", "vhost": "file-uploader", "destination": "q.file.uploaded.dead", "destination_type": "queue", "routing_key": "", "arguments": {} },
+    { "source": "ex.users", "vhost": "file-uploader", "destination": "q.user.imported", "destination_type": "queue", "routing_key": "user.imported", "arguments": {} },
+    { "source": "ex.users.dlx", "vhost": "file-uploader", "destination": "q.user.imported.dead", "destination_type": "queue", "routing_key": "", "arguments": {} }
   ],
   "policies": [
     {
@@ -31,6 +37,19 @@
       "priority": 0,
       "definition": {
         "dead-letter-exchange": "ex.files.dlx",
+        "dead-letter-strategy": "at-least-once",
+        "overflow": "reject-publish",
+        "delivery-limit": 3
+      }
+    },
+    {
+      "name": "p.user.imported.dead-lettering",
+      "vhost": "file-uploader",
+      "pattern": "^q\\.user\\.imported$",
+      "apply-to": "queues",
+      "priority": 0,
+      "definition": {
+        "dead-letter-exchange": "ex.users.dlx",
         "dead-letter-strategy": "at-least-once",
         "overflow": "reject-publish",
         "delivery-limit": 3
