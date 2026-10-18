@@ -70,7 +70,14 @@ openssl x509 -req -in rabbitmq-file-processing-service.csr -CA ca.pem -CAkey ca-
   -out rabbitmq-file-processing-service.pem -days "$DAYS" -sha256 \
   -extfile <(printf "extendedKeyUsage=clientAuth")
 
-rm -f file-service.csr user-service.csr api-service.csr user-db.csr file-db.csr rabbitmq.csr rabbitmq-file-service.csr rabbitmq-file-processing-service.csr ca.srl
-chmod 644 ca.pem user-db.pem user-db-key.pem file-db.pem file-db-key.pem file-service.pem file-service-key.pem user-service.pem user-service-key.pem api-service.pem api-service-key.pem rabbitmq.pem rabbitmq-key.pem rabbitmq-file-service.pem rabbitmq-file-service-key.pem rabbitmq-file-processing-service.pem rabbitmq-file-processing-service-key.pem
+echo "Generating rabbitmq client certificate for user-service..."
+openssl genrsa -out rabbitmq-user-service-key.pem 2048
+openssl req -new -key rabbitmq-user-service-key.pem -subj "/CN=user-service" -out rabbitmq-user-service.csr
+openssl x509 -req -in rabbitmq-user-service.csr -CA ca.pem -CAkey ca-key.pem -CAcreateserial \
+  -out rabbitmq-user-service.pem -days "$DAYS" -sha256 \
+  -extfile <(printf "extendedKeyUsage=clientAuth")
+
+rm -f file-service.csr user-service.csr api-service.csr user-db.csr file-db.csr rabbitmq.csr rabbitmq-file-service.csr rabbitmq-file-processing-service.csr rabbitmq-user-service.csr ca.srl
+chmod 644 ca.pem user-db.pem user-db-key.pem file-db.pem file-db-key.pem file-service.pem file-service-key.pem user-service.pem user-service-key.pem api-service.pem api-service-key.pem rabbitmq.pem rabbitmq-key.pem rabbitmq-file-service.pem rabbitmq-file-service-key.pem rabbitmq-file-processing-service.pem rabbitmq-file-processing-service-key.pem rabbitmq-user-service.pem rabbitmq-user-service-key.pem
 
 echo "Done. Certs written to $CERTS_DIR"
