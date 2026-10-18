@@ -2,6 +2,8 @@ package users
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"time"
 	"unicode"
@@ -70,6 +72,29 @@ func (s *Service) Create(ctx context.Context, username, email, firstName, lastNa
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return User{}, err
+	}
+
+	return s.repo.Create(ctx, User{
+		Username:     username,
+		Email:        email,
+		FirstName:    firstName,
+		LastName:     lastName,
+		PasswordHash: string(hash),
+	})
+}
+
+func (s *Service) Import(ctx context.Context, username, email, firstName, lastName string) (User, error) {
+	if _, reserved := reservedUsernames[username]; reserved {
+		return User{}, ErrReservedUsername
+	}
+
+	secret := make([]byte, 32)
+	if _, err := rand.Read(secret); err != nil {
+		return User{}, err
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(hex.EncodeToString(secret)), bcrypt.DefaultCost)
 	if err != nil {
 		return User{}, err
 	}

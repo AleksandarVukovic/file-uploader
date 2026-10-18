@@ -1,12 +1,12 @@
 # file-uploader
 
-A Go mono repo of independent microservices for uploading files to S3. `api-service` is the only publicly exposed service; it forwards uploads to `file-service`, which stores them in S3 and publishes a `FileUploaded` event to RabbitMQ, and checks logins against `user-service`, which owns user accounts in PostgreSQL. `file-processing-service` is still at skeleton stage.
+A Go mono repo of independent microservices for uploading files to S3. `api-service` is the only publicly exposed service; it forwards uploads to `file-service`, which stores them in S3 and publishes a `FileUploaded` event to RabbitMQ, and checks logins against `user-service`, which owns user accounts in PostgreSQL. `file-processing-service` consumes those events, reads the uploaded object back from S3, validates the user rows in the CSV and publishes them to RabbitMQ as `UsersImported` events.
 
 ## Requirements
 
 - Go 1.26+
 - Docker (required for `make test-e2e` and `file-service`'s mTLS integration tests; optional otherwise, e.g. for building images or `make run`)
-- AWS credentials with access to the target S3 bucket (for `file-service`)
+- AWS credentials with access to the target S3 bucket (for `file-service` and `file-processing-service`)
 
 ## Services
 
@@ -15,11 +15,11 @@ A Go mono repo of independent microservices for uploading files to S3. `api-serv
 | `api-service`              | Public  | Gateway; validates and forwards file uploads; issues JWTs on login after checking credentials with `user-service` (see [Authentication](#authentication)) |
 | `file-service`             | Internal| Streams uploaded files to S3 and publishes `FileUploaded` events to RabbitMQ (see [File events](#file-events)) |
 | `user-service`             | Internal| User accounts and credential checks over gRPC (mTLS), backed by PostgreSQL (see [user-service](#user-service)) |
-| `file-processing-service`  | Internal| File processing (skeleton)                      |
+| `file-processing-service`  | Internal| Consumes `FileUploaded` events from RabbitMQ, validates the CSV user rows of the uploaded object in S3 and publishes them as `UsersImported` events (see [File events](#file-events) and [User events](#user-events)) |
 
 Each service exposes:
 
-- `GET /health` — health check, returns `{"status": "ok"}` (`api-service`, `file-service`, `user-service`)
+- `GET /health` — health check, returns `{"status": "ok"}` (`api-service`, `file-service`, `file-processing-service`, `user-service`)
 - `POST /api/v1/files/upload` — uploads a single file (`api-service`, `file-service`); requires a valid JWT
 - `POST /login` — authenticates a user and returns a JWT (`api-service` only, see [Authentication](#authentication))
 - `POST /register` — creates a user account (`api-service` only, public; see [Authentication](#authentication))
@@ -54,7 +54,7 @@ On success the endpoint responds `201 Created` with a JSON body describing the s
 
 ## File events
 
-`file-service` publishes the `FileUploaded` events it records in `outbox_events` (the transactional outbox) to RabbitMQ, so a consumer such as `file-processing-service` can react to uploads. A background poller in `file-service/cmd/main.go` runs every 2 seconds and calls the `broker` service (`file-service/internal/service/broker`), which:
+`file-service` publishes the `FileUploaded` events it records in `outbox_events` (the transactional outbox) to RabbitMQ, so `file-processing-service` can react to uploads: it consumes `q.file.uploaded`, reads the uploaded object back from the S3 bucket named in the event's `rootDir`, validates its rows and publishes them (see [User events](#user-events)). It doesn't re-verify the checksum: the object comes from S3, and `file-service` already had S3 check the checksum on upload. The bucket must be one of the service's allowed buckets (`--bucketNames`/`S3_BUCKET_NAMES`, comma-separated), so a wrong or tampered `rootDir` never turns the service into a reader of arbitrary buckets. It acks the message on success, discards it to the dead-letter queue on permanent failures (unknown event type, invalid payload, bucket not allowed, missing object, empty file or unexpected CSV header) and requeues it on transient ones (including a failed publish). A background poller in `file-service/cmd/main.go` runs every 2 seconds and calls the `broker` service (`file-service/internal/service/broker`), which:
 
 1. fetches up to `--brokerBatchSize` (`BROKER_BATCH_SIZE`, default 100) unpublished events, oldest first, only of aggregate type `file` (other event types will get their own publishers), with `FOR UPDATE SKIP LOCKED`;
 2. publishes each one and waits for the broker's publisher confirm;
@@ -84,9 +84,41 @@ The code is split so each layer only depends inwards: `file-service/internal/out
 
 The broker's server certificate is verified against `TLS_CA_CERT_FILE`. See `file-service/.env.example`.
 
+## User events
+
+`file-processing-service` treats every uploaded object as a CSV of users. The header must be exactly `id,username,name,email`; anything else (or an empty file) is a permanent failure and the message is discarded. Rows are read one at a time (the object is streamed from S3, not loaded into memory) and validated:
+
+- `id`: a positive integer.
+- `username`: `^[a-z][a-z0-9_]*$`, the same rule as `user-service`.
+- `name`: a first and a last name separated by a single space; they become `firstName` and `lastName`.
+- `email`: a bare, valid address (no display name); it is lowercased.
+
+A row that is malformed or fails validation is logged with its line number and skipped; it doesn't fail the file. The valid rows are published in batches of 50, one batch after another, each waiting for the broker's publisher confirm. If a publish fails, the whole file is requeued, so a file can be processed more than once.
+
+Each batch is one message to the durable topic exchange `ex.users` with routing key `user.imported`, as persistent `application/json`, with `type` `UsersImported`. Its message ID is `<fileId>-<batch>` (batch numbers start at 0), which stays the same when a file is redelivered, so consumers can deduplicate on it. The body is `common/events.UsersImportedPayload`:
+
+```json
+{"fileId": "0b8e6f1c-3f0a-4a53-9f44-2f6a1d7a8c11", "batch": 0, "users": [{"id": 1, "username": "alice", "firstName": "Alice", "lastName": "Johnson", "email": "alice@example.com"}]}
+```
+
+`infra/rabbitmq/definitions.json` declares the exchange, the quorum queue `q.user.imported` (bound with `user.imported`) and a dead-letter queue `q.user.imported.dead` fed through `ex.users.dlx` after three failed deliveries. Nothing consumes `q.user.imported` yet; when `user-service` does, it will need its own RabbitMQ user and client certificate.
+
+`file-processing-service` needs the broker at startup and exits if it can't connect. Configuration (env var or flag):
+
+| Env var                 | Flag                  | Default           | Purpose                                                        |
+| ----------------------- | --------------------- | ----------------- | -------------------------------------------------------------- |
+| `BROKER_URL`            | `brokerURL`           |                   | RabbitMQ URL including the vhost, e.g. `amqps://rabbitmq:5671/file-uploader` |
+| `BROKER_FILES_QUEUE`    | `brokerFilesQueue`    | `q.file.uploaded` | Queue the `FileUploaded` events are consumed from              |
+| `BROKER_USERS_EXCHANGE` | `brokerUsersExchange` | `ex.users`        | Exchange the `UsersImported` events are published to           |
+| `BROKER_TLS_CERT_FILE`  | `brokerTLSCertFile`   |                   | Client certificate presented to RabbitMQ; its CN is the RabbitMQ user |
+| `BROKER_TLS_KEY_FILE`   | `brokerTLSKeyFile`    |                   | Private key of that client certificate                         |
+| `S3_BUCKET_NAMES`       | `bucketNames`         |                   | Comma-separated buckets the service may read from              |
+
+The broker's server certificate is verified against `TLS_CA_CERT_FILE`.
+
 ## Authentication
 
-`api-service` exposes `POST /login`, which accepts a JSON body `{"username": "...", "password": "..."}` and returns `{"token": "<jwt>"}` on success. Login checks the credentials by calling `user-service`'s `Authenticate` over gRPC with mutual TLS, forwarding the request's `x-request-id`. A wrong password and an unknown user both come back as `401 invalid_credentials`, and an unreachable `user-service` as `503 unavailable`. `api-service` still signs the token itself rather than `user-service`; moving token issuance there is a possible follow-up. `POST /register` creates an account: it takes `{"username": "...", "email": "...", "password": "..."}` and calls `user-service`'s `Create`, returning `201` with `{"id": ..., "username": "...", "email": "..."}`. It is public and unversioned like `/login`, and runs the same middleware chain. The body is validated against the same rules as `user-service` (lowercase username, 8–72 printable ASCII password), and `user-service` additionally rejects reserved usernames and passwords missing an uppercase letter, a lowercase letter, a digit or a special character (`400 invalid_input`, with the reason in the message). A taken username or email gives `409 user_exists` (one response for both, so it doesn't say which field clashed), and an unreachable `user-service` gives `503`. Registration is not rate-limited yet, and every attempt costs a bcrypt hash, so put a limit in front of it before exposing it publicly.
+`api-service` exposes `POST /login`, which accepts a JSON body `{"username": "...", "password": "..."}` and returns `{"token": "<jwt>"}` on success. Login checks the credentials by calling `user-service`'s `Authenticate` over gRPC with mutual TLS, forwarding the request's `x-request-id`. A wrong password and an unknown user both come back as `401 invalid_credentials`, and an unreachable `user-service` as `503 unavailable`. `api-service` still signs the token itself rather than `user-service`; moving token issuance there is a possible follow-up. `POST /register` creates an account: it takes `{"username": "...", "email": "...", "firstName": "...", "lastName": "...", "password": "..."}` and calls `user-service`'s `Create`, returning `201` with `{"id": ..., "username": "...", "email": "...", "firstName": "...", "lastName": "..."}`. It is public and unversioned like `/login`, and runs the same middleware chain. The body is validated against the same rules as `user-service` (lowercase username, 1–100 character first and last names, 8–72 printable ASCII password), and `user-service` additionally rejects reserved usernames and passwords missing an uppercase letter, a lowercase letter, a digit or a special character (`400 invalid_input`, with the reason in the message). A taken username or email gives `409 user_exists` (one response for both, so it doesn't say which field clashed), and an unreachable `user-service` gives `503`. Registration is not rate-limited yet, and every attempt costs a bcrypt hash, so put a limit in front of it before exposing it publicly.
 
 The returned JWT is HS256-signed using the `JWT_SECRET` environment variable, with a 15-minute expiry (`sub` set to the user's numeric ID, plus standard `iat`/`exp` claims). `api-service` **requires `JWT_SECRET` to be set** and will refuse to start without it.
 
@@ -105,9 +137,10 @@ Code is layered handler → service → repository:
 Validation rules, enforced at the API boundary by the goa design:
 
 - Username: 3–50 characters, `^[a-z][a-z0-9_]*$` (lowercase only, starts with a letter).
+- First and last name (on `Create`): both required, 1–100 characters each, with no further character rules (so a whitespace-only name is accepted).
 - Password (on `Create`): 8–72 printable ASCII characters (no spaces or emoji, since bcrypt truncates at 72 bytes), and the service additionally requires an uppercase letter, a lowercase letter, a digit and a special character. `Authenticate` only checks that the password is 8–72 characters, so a later change to the creation rules can't lock out existing users.
 
-The database is PostgreSQL; the schema lives in `user-service/db/migrations` (goose) and queries in `user-service/db/queries` (sqlc). The username must be lowercase (`CHECK` constraint) and unique, and emails are unique case-insensitively (an index on `lower(email)`).
+The database is PostgreSQL; the schema lives in `user-service/db/migrations` (goose) and queries in `user-service/db/queries` (sqlc). The username must be lowercase (`CHECK` constraint) and unique, and emails are unique case-insensitively (an index on `lower(email)`). `first_name` and `last_name` are `VARCHAR(100) NOT NULL`; migration `00002_users_names` added them and set `''` on existing rows.
 
 Configuration (env var or flag): `DATABASE_URL` (env only, so the password never appears on the command line), `HEALTH_PORT`, `GRPC_PORT`, `TLS_CERT_FILE`, `TLS_KEY_FILE`, `TLS_CA_CERT_FILE`, `DEBUG`. See `user-service/.env.example`. `DATABASE_URL` must include a user, password, host, database name and `sslmode=verify-full`, and the service refuses to start otherwise.
 
@@ -119,7 +152,7 @@ Configuration (env var or flag): `DATABASE_URL` (env only, so the password never
 
 `user-service`'s connection to PostgreSQL is TLS-only. The client side insists on `sslmode=verify-full` (it validates the server certificate and hostname), and the local database is additionally configured to refuse any non-TLS connection (`user-service/db/pg_hba.local.conf` has only a `hostssl` rule).
 
-RabbitMQ is TLS-only too (`infra/rabbitmq/rabbitmq.conf`): there is no plaintext listener, only port 5671 with TLS 1.2/1.3, and a client must present a certificate signed by the shared CA. Clients authenticate with that certificate alone (SASL `EXTERNAL`), the certificate's CN is the RabbitMQ user, and the users have no password. Permissions are least-privilege: `file-service` may only write to `ex.files`, and `file-processing-service` may only read `q.file.uploaded`.
+RabbitMQ is TLS-only too (`infra/rabbitmq/rabbitmq.conf`): there is no plaintext listener, only port 5671 with TLS 1.2/1.3, and a client must present a certificate signed by the shared CA. Clients authenticate with that certificate alone (SASL `EXTERNAL`), the certificate's CN is the RabbitMQ user, and the users have no password. Permissions are least-privilege: `file-service` may only write to `ex.files`, and `file-processing-service` may only read `q.file.uploaded` and write to `ex.users`.
 
 ## Running locally
 
@@ -130,9 +163,9 @@ make run
 
 `make certs` generates a local development CA and leaf certificates for `api-service`, `file-service`, `user-service`, the `user-db` and `file-db` Postgres instances and RabbitMQ (a `rabbitmq` server certificate plus one client certificate each for `file-service` and `file-processing-service`, named `rabbitmq-<service>.pem`) under `certs/` (gitignored). Run it once before the first `make run`, and again if `certs/` is ever deleted — the services will refuse to start without a valid cert/key/CA on disk.
 
-`make run` builds and starts `api-service`, `file-service`, `user-service`, their PostgreSQL databases (`user-db`, `file-db`) and RabbitMQ via `docker-compose.local.yml`; one-shot `user-db-migrate` and `file-db-migrate` containers apply the goose migrations before `user-service` and `file-service` start respectively, and `file-service` also waits for RabbitMQ to be healthy. `file-service` mounts your local `~/.aws` credentials read-only, so make sure `AWS_PROFILE` is configured on the host. Copy each service's `.env.example` to `.env` and fill in the required values (`S3_BUCKET_NAME`, `AWS_PROFILE`, `AWS_REGION`, `JWT_SECRET`) — the root `.env` feeds `docker-compose.local.yml` directly, and `api-service` will refuse to start without `JWT_SECRET` set. The local database user, password and name default to `user_service`/`user_service`/`users` and can be overridden with `USER_DB_USER`, `USER_DB_PASSWORD` and `USER_DB_NAME`; `file-db` works the same way with `file_service`/`file_service`/`files` and `FILE_DB_USER`, `FILE_DB_PASSWORD` and `FILE_DB_NAME`.
+`make run` builds and starts `api-service`, `file-service`, `file-processing-service`, `user-service`, their PostgreSQL databases (`user-db`, `file-db`) and RabbitMQ via `docker-compose.local.yml`; one-shot `user-db-migrate` and `file-db-migrate` containers apply the goose migrations before `user-service` and `file-service` start respectively, and `file-service` and `file-processing-service` also wait for RabbitMQ to be healthy. `file-service` and `file-processing-service` mount your local `~/.aws` credentials read-only, so make sure `AWS_PROFILE` is configured on the host. Copy each service's `.env.example` to `.env` and fill in the required values (`S3_BUCKET_NAME`, `AWS_PROFILE`, `AWS_REGION`, `JWT_SECRET`; `file-processing-service` receives the bucket as `S3_BUCKET_NAMES`) — the root `.env` feeds `docker-compose.local.yml` directly, and `api-service` will refuse to start without `JWT_SECRET` set. The local database user, password and name default to `user_service`/`user_service`/`users` and can be overridden with `USER_DB_USER`, `USER_DB_PASSWORD` and `USER_DB_NAME`; `file-db` works the same way with `file_service`/`file_service`/`files` and `FILE_DB_USER`, `FILE_DB_PASSWORD` and `FILE_DB_NAME`.
 
-There are no users in a fresh database, so create one with `POST /register` (for example `curl -X POST localhost:8080/register -H 'Content-Type: application/json' -d '{"username":"john_doe","email":"john.doe@example.com","password":"Correct-Horse-42"}'`) before trying `/login`. The default container ports are 8080 (HTTP) and 8443 (mTLS); `user-service`'s health port is published on host port `8082`, its gRPC port isn't published, and RabbitMQ's TLS port is published on `5671`.
+There are no users in a fresh database, so create one with `POST /register` (for example `curl -X POST localhost:8080/register -H 'Content-Type: application/json' -d '{"username":"john_doe","email":"john.doe@example.com","firstName":"John","lastName":"Doe","password":"Correct-Horse-42"}'`) before trying `/login`. The default container ports are 8080 (HTTP) and 8443 (mTLS); `user-service`'s health port is published on host port `8082`, `file-processing-service`'s on `8083`, its gRPC port isn't published, and RabbitMQ's TLS port is published on `5671`.
 
 To run migrations by hand from `user-service/`, export `GOOSE_DRIVER`, `GOOSE_DBSTRING` and `GOOSE_MIGRATION_DIR` (see `user-service/.env.example`) and use `make migrate-up`, `migrate-down`, `migrate-status` or `migrate-create NAME=...`.
 
@@ -150,7 +183,7 @@ The stack also includes `user-service` and its PostgreSQL (TLS-only, with the mi
 
 `BeforeSuite` starts the stack in two phases: LocalStack first, to create the test bucket, then everything else. `file-service` checks that its S3 bucket is reachable on startup and exits if it isn't, so the bucket has to exist before it starts. Since one user can't upload the same content twice, specs that upload use `uniqueTestdata` (the fixture plus a unique row) so their checksums differ.
 
-The `File events` spec uploads a file, then connects to RabbitMQ from the test host with the `file-processing-service` client certificate and reads `q.file.uploaded` until the event for that upload shows up, asserting the message properties and payload. Events from the other specs' uploads land in the same queue, and the spec reads past them.
+The `File events` spec uploads a file, then connects to RabbitMQ from the test host with the `file-processing-service` client certificate and reads `q.file.uploaded` until the event for that upload shows up, asserting the message properties and payload. Events from the other specs' uploads land in the same queue, and the spec reads past them. `file-processing-service` isn't part of the e2e stack yet: it would consume `q.file.uploaded` ahead of this spec, and the `UsersImported` events it publishes have no consumer yet to assert against.
 
 ## Make targets
 
@@ -160,7 +193,7 @@ Run from the repo root:
 | -------------------------------- | ------------------------------------------------------------------ |
 | `make`                           | Build+test every service and `common/`                             |
 | `make certs`                     | Generate local dev CA + leaf certs for mTLS between services and for RabbitMQ |
-| `make run`                       | Run `api-service` + `file-service` + `user-service`, their databases and RabbitMQ locally via docker compose |
+| `make run`                       | Run `api-service` + `file-service` + `file-processing-service` + `user-service`, their databases and RabbitMQ locally via docker compose |
 | `make test-e2e`                  | Run the `test/integration/` e2e suite against a real api-service + user-service + file-service + PostgreSQL + RabbitMQ + LocalStack stack (see [End-to-end tests](#end-to-end-tests)) |
 | `make all-services TARGET=<t>`   | Run `make <t>` in every service                                    |
 | `make common-pkg-test`           | Vet + race-test only `common/...`                                  |

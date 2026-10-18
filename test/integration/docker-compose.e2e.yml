@@ -118,11 +118,17 @@ services:
       TLS_CERT_FILE: /certs/user-service.pem
       TLS_KEY_FILE: /certs/user-service-key.pem
       TLS_CA_CERT_FILE: /certs/ca.pem
+      BROKER_URL: amqps://rabbitmq:5671/file-uploader
+      BROKER_USERS_QUEUE: q.user.imported
+      BROKER_TLS_CERT_FILE: /certs/rabbitmq-user-service.pem
+      BROKER_TLS_KEY_FILE: /certs/rabbitmq-user-service-key.pem
     volumes:
       - ../../certs:/certs:ro
     depends_on:
       user-db-migrate:
         condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
 
   rabbitmq:
     image: rabbitmq:4.1.4

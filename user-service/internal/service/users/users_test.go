@@ -3,6 +3,7 @@ package users
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
@@ -122,6 +123,67 @@ func TestService_Create(t *testing.T) {
 			repo.On("Create", mock.Anything, mock.Anything).Return(User{}, repoErr)
 
 			_, err := New(repo).Create(context.Background(), validUsername, validEmail, validFirstName, validLastName, validPassword)
+
+			require.ErrorIs(t, err, repoErr)
+			repo.AssertExpectations(t)
+		}
+	})
+
+	t.Run("fails without touching the repository when the password is too long to hash", func(t *testing.T) {
+		repo := &mockRepo{}
+		tooLong := validPassword + strings.Repeat("a", 72)
+
+		_, err := New(repo).Create(context.Background(), validUsername, validEmail, validFirstName, validLastName, tooLong)
+
+		require.ErrorIs(t, err, bcrypt.ErrPasswordTooLong)
+		repo.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
+	})
+}
+
+func TestService_Import(t *testing.T) {
+	t.Run("stores the user with an unguessable random password hash", func(t *testing.T) {
+		var hashes []string
+		repo := &mockRepo{}
+		repo.On("Create", mock.Anything, mock.MatchedBy(func(u User) bool {
+			hashes = append(hashes, u.PasswordHash)
+			return u.Username == validUsername &&
+				u.Email == validEmail &&
+				u.FirstName == validFirstName &&
+				u.LastName == validLastName &&
+				u.PasswordHash != ""
+		})).Return(User{ID: 1, Username: validUsername}, nil)
+		svc := New(repo)
+
+		got, err := svc.Import(context.Background(), validUsername, validEmail, validFirstName, validLastName)
+		require.NoError(t, err)
+		_, err = svc.Import(context.Background(), validUsername, validEmail, validFirstName, validLastName)
+		require.NoError(t, err)
+
+		require.Equal(t, int64(1), got.ID)
+		require.Len(t, hashes, 2)
+		require.NotEqual(t, hashes[0], hashes[1])
+		repo.AssertExpectations(t)
+	})
+
+	t.Run("rejects reserved usernames without touching the repository", func(t *testing.T) {
+		for name := range reservedUsernames {
+			t.Run(name, func(t *testing.T) {
+				repo := &mockRepo{}
+
+				_, err := New(repo).Import(context.Background(), name, validEmail, validFirstName, validLastName)
+
+				require.ErrorIs(t, err, ErrReservedUsername)
+				repo.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
+			})
+		}
+	})
+
+	t.Run("propagates repository errors", func(t *testing.T) {
+		for _, repoErr := range []error{ErrUsernameTaken, ErrEmailTaken, errors.New("db down")} {
+			repo := &mockRepo{}
+			repo.On("Create", mock.Anything, mock.Anything).Return(User{}, repoErr)
+
+			_, err := New(repo).Import(context.Background(), validUsername, validEmail, validFirstName, validLastName)
 
 			require.ErrorIs(t, err, repoErr)
 			repo.AssertExpectations(t)

@@ -4,11 +4,13 @@
   ],
   "users": [
     { "name": "file-service", "password_hash": "", "hashing_algorithm": "rabbit_password_hashing_sha256", "tags": "" },
-    { "name": "file-processing-service", "password_hash": "", "hashing_algorithm": "rabbit_password_hashing_sha256", "tags": "" }
+    { "name": "file-processing-service", "password_hash": "", "hashing_algorithm": "rabbit_password_hashing_sha256", "tags": "" },
+    { "name": "user-service", "password_hash": "", "hashing_algorithm": "rabbit_password_hashing_sha256", "tags": "" }
   ],
   "permissions": [
     { "user": "file-service", "vhost": "file-uploader", "configure": "", "write": "^ex\\.files$", "read": "" },
-    { "user": "file-processing-service", "vhost": "file-uploader", "configure": "", "write": "^ex\\.users$", "read": "^q\\.file\\.uploaded$" }
+    { "user": "file-processing-service", "vhost": "file-uploader", "configure": "", "write": "^ex\\.users$", "read": "^q\\.file\\.uploaded$" },
+    { "user": "user-service", "vhost": "file-uploader", "configure": "", "write": "", "read": "^q\\.user\\.imported$" }
   ],
   "exchanges": [
     { "name": "ex.files", "vhost": "file-uploader", "type": "topic", "durable": true, "auto_delete": false, "internal": false, "arguments": {} },
