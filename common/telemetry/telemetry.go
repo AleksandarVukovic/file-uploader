@@ -93,3 +93,11 @@ func Init(ctx context.Context, serviceName, collectorURL string, sampleRatio flo
 func SetFileID(ctx context.Context, fileID string) {
 	oteltrace.SpanFromContext(ctx).SetAttributes(FileIDKey.String(fileID))
 }
+
+func TraceID(ctx context.Context) string {
+	sc := oteltrace.SpanContextFromContext(ctx)
+	if !sc.HasTraceID() {
+		return ""
+	}
+	return sc.TraceID().String()
+}

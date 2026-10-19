@@ -65,7 +65,9 @@ func (p *Processor) Process(d rabbitmq.Delivery) rabbitmq.Action {
 
 	ctx, span := tracer.Start(context.Background(), "process file uploaded")
 	defer span.End()
+	
 	telemetry.SetFileID(ctx, payload.FileID)
+	traceID := telemetry.TraceID(ctx)
 
 	err := p.processFileUploaded(ctx, payload)
 	if err != nil {
@@ -74,18 +76,20 @@ func (p *Processor) Process(d rabbitmq.Delivery) rabbitmq.Action {
 	}
 	switch {
 	case err == nil:
-		p.log.Info("file processed", "messageId", d.MessageId, "fileId", payload.FileID)
+		p.log.Info("file processed", "messageId", d.MessageId, "fileId", payload.FileID, "trace_id", traceID)
 		return rabbitmq.Ack
 	case errors.Is(err, ErrObjectNotFound), errors.Is(err, ErrBucketNotAllowed), errors.Is(err, ErrInvalidHeader):
-		p.log.Error("file cannot be processed, discarding", "messageId", d.MessageId, "fileId", payload.FileID, "err", err)
+		p.log.Error("file cannot be processed, discarding", "messageId", d.MessageId, "fileId", payload.FileID, "trace_id", traceID, "err", err)
 		return rabbitmq.NackDiscard
 	default:
-		p.log.Error("failed to process file, requeueing", "messageId", d.MessageId, "fileId", payload.FileID, "err", err)
+		p.log.Error("failed to process file, requeueing", "messageId", d.MessageId, "fileId", payload.FileID, "trace_id", traceID, "err", err)
 		return rabbitmq.NackRequeue
 	}
 }
 
 func (p *Processor) processFileUploaded(ctx context.Context, payload events.FileUploadedPayload) error {
+	traceID := telemetry.TraceID(ctx)
+
 	body, err := p.store.Get(ctx, payload.RootDir, payload.Path)
 	if err != nil {
 		return err
@@ -117,7 +121,7 @@ func (p *Processor) processFileUploaded(ctx context.Context, payload events.File
 		line, _ := reader.FieldPos(0)
 
 		if _, ok := errors.AsType[*csv.ParseError](err); ok {
-			p.log.Error("skipping malformed row", "fileId", payload.FileID, "line", line, "err", err)
+			p.log.Error("skipping malformed row", "fileId", payload.FileID, "trace_id", traceID, "line", line, "err", err)
 			skipped++
 			continue
 		}
@@ -127,7 +131,7 @@ func (p *Processor) processFileUploaded(ctx context.Context, payload events.File
 
 		user, err := parseUser(row)
 		if err != nil {
-			p.log.Error("skipping invalid row", "fileId", payload.FileID, "line", line, "err", err)
+			p.log.Error("skipping invalid row", "fileId", payload.FileID, "trace_id", traceID, "line", line, "err", err)
 			skipped++
 			continue
 		}
@@ -150,7 +154,7 @@ func (p *Processor) processFileUploaded(ctx context.Context, payload events.File
 		batches++
 	}
 
-	p.log.Info("csv processed", "fileId", payload.FileID, "valid", valid, "skipped", skipped, "batches", batches)
+	p.log.Info("csv processed", "fileId", payload.FileID, "trace_id", traceID, "valid", valid, "skipped", skipped, "batches", batches)
 	return nil
 }
 

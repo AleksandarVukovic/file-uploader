@@ -8,6 +8,7 @@ import (
 
 	"github.com/aleksandarv/file-uploader/common/logger"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/trace"
 	goam "goa.design/goa/v3/middleware"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -92,6 +93,35 @@ func TestLogger_OptionalRequestID(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, buf.String(), "handling")
 	require.NotContains(t, buf.String(), "reqID")
+}
+
+func TestLogger_TagsLoggerWithTraceIDWhenSpanPresent(t *testing.T) {
+	log, buf := newBufferLogger()
+	traceID := trace.TraceID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+	ctx := trace.ContextWithSpanContext(context.Background(), trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID: traceID,
+		SpanID:  trace.SpanID{1, 2, 3, 4, 5, 6, 7, 8},
+	}))
+
+	_, err := Logger(log, false)(ctx, "req", &grpc.UnaryServerInfo{}, func(ctx context.Context, req any) (any, error) {
+		logger.FromCtx(ctx).Info("handling")
+		return "res", nil
+	})
+
+	require.NoError(t, err)
+	require.Contains(t, buf.String(), `"trace_id":"`+traceID.String()+`"`)
+}
+
+func TestLogger_OmitsTraceIDWithoutSpan(t *testing.T) {
+	log, buf := newBufferLogger()
+
+	_, err := Logger(log, false)(context.Background(), "req", &grpc.UnaryServerInfo{}, func(ctx context.Context, req any) (any, error) {
+		logger.FromCtx(ctx).Info("handling")
+		return "res", nil
+	})
+
+	require.NoError(t, err)
+	require.NotContains(t, buf.String(), "trace_id")
 }
 
 func TestLogger_MandatoryRequestIDMissingPanics(t *testing.T) {

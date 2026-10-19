@@ -43,7 +43,9 @@ func (i *Importer) Process(d rabbitmq.Delivery) rabbitmq.Action {
 
 	ctx, span := tracer.Start(context.Background(), "import users")
 	defer span.End()
+	
 	telemetry.SetFileID(ctx, payload.FileID)
+	traceID := telemetry.TraceID(ctx)
 
 	var imported, skipped int
 	for _, u := range payload.Users {
@@ -52,19 +54,19 @@ func (i *Importer) Process(d rabbitmq.Delivery) rabbitmq.Action {
 		case err == nil:
 			imported++
 		case errors.Is(err, users.ErrUsernameTaken), errors.Is(err, users.ErrEmailTaken):
-			i.log.Info("user already exists, skipping", "messageId", d.MessageId, "fileId", payload.FileID, "username", u.Username)
+			i.log.Info("user already exists, skipping", "messageId", d.MessageId, "fileId", payload.FileID, "trace_id", traceID, "username", u.Username)
 			skipped++
 		case errors.Is(err, users.ErrReservedUsername):
-			i.log.Error("username is reserved, skipping", "messageId", d.MessageId, "fileId", payload.FileID, "username", u.Username)
+			i.log.Error("username is reserved, skipping", "messageId", d.MessageId, "fileId", payload.FileID, "trace_id", traceID, "username", u.Username)
 			skipped++
 		default:
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
-			i.log.Error("failed to import user, requeueing", "messageId", d.MessageId, "fileId", payload.FileID, "batch", payload.Batch, "username", u.Username, "err", err)
+			i.log.Error("failed to import user, requeueing", "messageId", d.MessageId, "fileId", payload.FileID, "trace_id", traceID, "batch", payload.Batch, "username", u.Username, "err", err)
 			return rabbitmq.NackRequeue
 		}
 	}
 
-	i.log.Info("users imported", "messageId", d.MessageId, "fileId", payload.FileID, "batch", payload.Batch, "imported", imported, "skipped", skipped)
+	i.log.Info("users imported", "messageId", d.MessageId, "fileId", payload.FileID, "trace_id", traceID, "batch", payload.Batch, "imported", imported, "skipped", skipped)
 	return rabbitmq.Ack
 }
