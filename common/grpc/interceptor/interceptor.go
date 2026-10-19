@@ -6,6 +6,7 @@ import (
 	"runtime/debug"
 
 	"github.com/aleksandarv/file-uploader/common/logger"
+	"github.com/aleksandarv/file-uploader/common/telemetry"
 	goam "goa.design/goa/v3/middleware"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -50,6 +51,9 @@ func Logger(log *slog.Logger, reqIDMandatory bool) grpc.UnaryServerInterceptor {
 			rlog = logger.WithRequestID(log, reqID)
 		} else if reqIDMandatory {
 			panic("interceptor: context without request ID")
+		}
+		if traceID := telemetry.TraceID(ctx); traceID != "" {
+			rlog = rlog.With("trace_id", traceID)
 		}
 		return handler(logger.WithCtx(ctx, rlog), req)
 	}

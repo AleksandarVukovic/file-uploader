@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/aleksandarv/file-uploader/common/logger"
+	"github.com/aleksandarv/file-uploader/common/telemetry"
 	"goa.design/goa/v3/middleware"
 )
 
@@ -58,6 +59,9 @@ func Logger(log *slog.Logger, reqIDMandatory bool) func(next http.Handler) http.
 				rlog = logger.WithRequestID(log, reqID)
 			} else if reqIDMandatory {
 				panic("logger: context without request ID")
+			}
+			if traceID := telemetry.TraceID(r.Context()); traceID != "" {
+				rlog = rlog.With("trace_id", traceID)
 			}
 			next.ServeHTTP(w, r.WithContext(logger.WithCtx(r.Context(), rlog)))
 		})

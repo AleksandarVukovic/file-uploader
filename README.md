@@ -240,7 +240,36 @@ ctx := logger.WithCtx(ctx, log)
 logger.FromCtx(ctx).Info("server started", "port", port)
 ```
 
-`FromCtx` panics if the context has no logger, so attach one early (e.g. in `main` or in middleware). `middleware.Logger(log, mandatory bool)` (`common/http/middleware`) always attaches a per-request logger to the context — tagged with the request ID once one has been populated on the context, without that tag otherwise. If `mandatory` is `true` and no request ID is present by the time this middleware runs, it panics instead of silently logging without one, so a route wired with `mandatory=true` must have a request-ID-populating middleware (goa's `RequestID` or `RequireContextHeaders`, see below) ahead of it in the chain.
+`FromCtx` panics if the context has no logger, so attach one early (e.g. in `main` or in middleware). `middleware.Logger(log, mandatory bool)` (`common/http/middleware`) always attaches a per-request logger to the context — tagged with the request ID once one has been populated on the context, without that tag otherwise. If `mandatory` is `true` and no request ID is present by the time this middleware runs, it panics instead of silently logging without one, so a route wired with `mandatory=true` must have a request-ID-populating middleware (goa's `RequestID` or `RequireContextHeaders`, see below) ahead of it in the chain. When the request carries an OpenTelemetry trace, the same per-request logger (and its gRPC counterpart in `common/grpc/interceptor`) is also tagged with `trace_id`, so a log line can be looked up in Jaeger (see [Observability](#observability)).
+
+`logger.WithAttrs(ctx, args...)` returns a context and a logger carrying extra attributes. Code that handles one file passes `fileId` as a plain log argument instead, which avoids deriving a logger per file.
+
+## Observability
+
+Every service exports traces and metrics with OpenTelemetry over OTLP/gRPC to a collector. `common/telemetry` (`Init(ctx, serviceName, collectorURL, sampleRatio)`) builds the providers, the resource (`service.name`, `service.instance.id` from the hostname, plus whatever the standard `OTEL_RESOURCE_ATTRIBUTES` env var adds) and a `TraceContext` + `Baggage` propagator, and returns a shutdown function that each `cmd/main.go` defers right after calling `Init` so buffered telemetry is flushed on exit. Call `Init` before anything that reads the global providers (`db.NewPool`, the S3 client).
+
+| Env var                   | Flag                   | Default | Purpose                                                                 |
+| ------------------------- | ---------------------- | ------- | ----------------------------------------------------------------------- |
+| `OTEL_COLLECTOR_URL`      | `otelCollectorURL`     |         | Collector's OTLP/gRPC URL; empty disables telemetry. `http://` is insecure, `https://` uses TLS |
+| `OTEL_TRACE_SAMPLE_RATIO` | `otelTraceSampleRatio` | `1.0`   | Fraction of new traces sampled (0–1); a parent's sampling decision is always respected |
+
+Only the collector URL and the ratio change between environments, so moving from the local stack to AWS needs no code change. The local value of `1.0` is for development only; set a lower ratio in production. The three request-serving services and `file-processing-service` have both settings in their `.env.example`.
+
+What is instrumented:
+
+- **HTTP:** `otelhttp` middleware on the `api-service` `auth` and `files` services and on `file-service`'s `files` service (goa's `r.Pattern` makes the spans `METHOD /route`), and `otelhttp` on the outgoing client transport (`common/http/client`), so `traceparent` flows from `api-service` to `file-service`. `/health` routes are not traced, except `user-service`'s.
+- **gRPC:** `otelgrpc` stats handlers on `api-service`'s connection to `user-service` and on `user-service`'s server.
+- **PostgreSQL:** `common/db.NewPool` adds the `otelpgx` tracer (without the acquire spans) and the pool metrics; `user-service` and `file-service` both create their pool through it.
+- **S3:** the AWS SDK clients in `file-service` and `file-processing-service` use the `smithyoteltracing` bridge, which emits the SDK's own spans.
+- **RabbitMQ consumers:** `file-processing-service` and `user-service` start one span per message (`process file uploaded`, `import users`), and `file-service`'s outbox poller one span per event (`publish file event`).
+
+Trace context is **not** carried through the outbox and RabbitMQ, because nothing is stored for it. The upload request, the event publish, the CSV processing and the user import are therefore separate traces. They are tied together by the file ID instead:
+
+- Spans for a file carry the attribute `file.id`, and logs carry `fileId` (alongside `trace_id`). Search Jaeger for the tag `file.id=<uuid>` (the UUID from the `201` response) to find all of them, and grep the logs for the same UUID.
+- The file ID is deliberately **not** a metric label: one time series per upload would blow up cardinality. Metrics stay aggregate and you go from them to a trace or log.
+- `file-service`'s poller starts a root trace per event, so at a sample ratio of `1.0` it adds traces whenever there are events to publish.
+
+`make run` also starts the telemetry stack from `docker-compose.local.yml` (configuration in `infra/telemetry/`): an OpenTelemetry Collector that receives OTLP on `4317`, sends traces to Jaeger (UI on `http://localhost:16686`) and exposes metrics on `8889` for Prometheus (`http://localhost:9090`) to scrape, plus Grafana (`http://localhost:3000`, anonymous admin, local only) with Prometheus and Jaeger already provisioned as data sources. The images are pinned to specific versions.
 
 ## Request IDs
 

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/aleksandarv/file-uploader/common/logger"
+	"go.opentelemetry.io/otel/trace"
 	"goa.design/goa/v3/middleware"
 )
 
@@ -29,6 +30,46 @@ func TestLogger_AttachesReqIDWhenPresent(t *testing.T) {
 
 	if !strings.Contains(buf.String(), `"reqID":"abc-123"`) {
 		t.Errorf("expected reqID in log output, got: %s", buf.String())
+	}
+}
+
+func TestLogger_AttachesTraceIDWhenSpanPresent(t *testing.T) {
+	var buf bytes.Buffer
+	log := slog.New(slog.NewJSONHandler(&buf, nil))
+	mw := Logger(log, false)
+
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logger.FromCtx(r.Context()).Info("handled")
+	})
+
+	traceID := trace.TraceID{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
+	spanCtx := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID: traceID,
+		SpanID:  trace.SpanID{1, 2, 3, 4, 5, 6, 7, 8},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req = req.WithContext(trace.ContextWithSpanContext(req.Context(), spanCtx))
+
+	mw(next).ServeHTTP(httptest.NewRecorder(), req)
+
+	if !strings.Contains(buf.String(), `"trace_id":"`+traceID.String()+`"`) {
+		t.Errorf("expected trace_id in log output, got: %s", buf.String())
+	}
+}
+
+func TestLogger_OmitsTraceIDWithoutSpan(t *testing.T) {
+	var buf bytes.Buffer
+	log := slog.New(slog.NewJSONHandler(&buf, nil))
+	mw := Logger(log, false)
+
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logger.FromCtx(r.Context()).Info("handled")
+	})
+
+	mw(next).ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if strings.Contains(buf.String(), "trace_id") {
+		t.Errorf("expected no trace_id field, got: %s", buf.String())
 	}
 }
 
