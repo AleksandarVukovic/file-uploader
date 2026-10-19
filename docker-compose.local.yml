@@ -71,6 +71,9 @@ services:
       BROKER_FILES_QUEUE: q.file.uploaded
       BROKER_TLS_CERT_FILE: /certs/rabbitmq-file-processing-service.pem
       BROKER_TLS_KEY_FILE: /certs/rabbitmq-file-processing-service-key.pem
+      OTEL_COLLECTOR_URL: http://otel-collector:4317
+      # note: this is value only for local env!
+      OTEL_TRACE_SAMPLE_RATIO: "1.0"
     volumes:
       - ~/.aws:/home/appuser/.aws:ro
       - ./certs:/certs:ro
