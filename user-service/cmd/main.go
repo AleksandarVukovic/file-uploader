@@ -22,7 +22,6 @@ import (
 	usersrepo "github.com/aleksandarv/file-uploader/user-service/internal/repository/users"
 	"github.com/aleksandarv/file-uploader/user-service/internal/service/importer"
 	userssvc "github.com/aleksandarv/file-uploader/user-service/internal/service/users"
-	"github.com/jackc/pgx/v5/pgxpool"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/wagslane/go-rabbitmq"
 	"google.golang.org/grpc"
@@ -92,7 +91,7 @@ func run() error {
 		}
 	}()
 
-	pool, err := pgxpool.New(ctx, dbURL)
+	pool, err := db.NewPool(ctx, dbURL)
 	if err != nil {
 		log.Error("failed to create database pool", "err", err)
 		return err
