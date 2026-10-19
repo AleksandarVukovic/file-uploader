@@ -2,32 +2,68 @@ package client
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/aleksandarv/file-uploader/common/http/middleware"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
-func TestNewDoer_SetsTLSClientConfig(t *testing.T) {
-	cfg := &tls.Config{ServerName: "file-service"}
+func TestNewDoer_UsesTLSClientConfig(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer srv.Close()
 
-	doer := NewDoer(false, cfg)
+	pool := x509.NewCertPool()
+	pool.AddCert(srv.Certificate())
 
-	rid, ok := doer.(contextHeadersDoer)
-	if !ok {
-		t.Fatalf("expected contextHeadersDoer, got %T", doer)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	httpClient, ok := rid.Doer.(*http.Client)
-	if !ok {
-		t.Fatalf("expected *http.Client, got %T", rid.Doer)
+	resp, err := NewDoer(false, &tls.Config{RootCAs: pool}).Do(req)
+	if err != nil {
+		t.Fatalf("expected the provided tls.Config to be used, got %v", err)
 	}
-	transport, ok := httpClient.Transport.(*http.Transport)
-	if !ok {
-		t.Fatalf("expected *http.Transport, got %T", httpClient.Transport)
+	resp.Body.Close()
+}
+
+func TestNewDoer_PropagatesTraceContext(t *testing.T) {
+	prevPropagator := otel.GetTextMapPropagator()
+	prevProvider := otel.GetTracerProvider()
+	t.Cleanup(func() {
+		otel.SetTextMapPropagator(prevPropagator)
+		otel.SetTracerProvider(prevProvider)
+	})
+	provider := sdktrace.NewTracerProvider()
+	t.Cleanup(func() { _ = provider.Shutdown(t.Context()) })
+	otel.SetTracerProvider(provider)
+	otel.SetTextMapPropagator(propagation.TraceContext{})
+
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.Header.Get("traceparent")
+	}))
+	defer srv.Close()
+
+	ctx, span := provider.Tracer("test").Start(t.Context(), "parent")
+	defer span.End()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, srv.URL, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if transport.TLSClientConfig != cfg {
-		t.Fatal("expected TLSClientConfig to be the provided tls.Config")
+	resp, err := NewDoer(false, nil).Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+
+	if !strings.Contains(got, span.SpanContext().TraceID().String()) {
+		t.Fatalf("expected traceparent carrying the parent trace ID, got %q", got)
 	}
 }
 

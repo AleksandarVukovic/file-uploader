@@ -12,6 +12,7 @@ import (
 	healthsvr "github.com/aleksandarv/file-uploader/api-service/gen/http/health/server"
 	apimiddleware "github.com/aleksandarv/file-uploader/api-service/internal/middleware"
 	httpmiddleware "github.com/aleksandarv/file-uploader/common/http/middleware"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/http/middleware"
 )
@@ -27,6 +28,7 @@ func Routes(log *slog.Logger, jwtSecret []byte, filesHandler files.Service, heal
 		middleware.UseXRequestIDHeaderOption(true),
 		middleware.XRequestHeaderLimitOption(64),
 	))
+	authSrv.Use(otelhttp.NewMiddleware("auth"))
 	authSrv.Mount(mux)
 	for _, m := range authSrv.Mounts {
 		log.Debug("expose auth API", "verb", m.Verb, "path", m.Pattern, "method", m.Method)
@@ -41,6 +43,7 @@ func Routes(log *slog.Logger, jwtSecret []byte, filesHandler files.Service, heal
 		middleware.UseXRequestIDHeaderOption(true),
 		middleware.XRequestHeaderLimitOption(64),
 	))
+	filesSrv.Use(otelhttp.NewMiddleware("files"))
 	filesSrv.Mount(mux)
 	for _, m := range filesSrv.Mounts {
 		log.Debug("expose API", "verb", m.Verb, "path", m.Pattern, "method", m.Method)

@@ -9,6 +9,7 @@ import (
 	"github.com/aleksandarv/file-uploader/file-service/gen/health"
 	filessvr "github.com/aleksandarv/file-uploader/file-service/gen/http/files/server"
 	healthsvr "github.com/aleksandarv/file-uploader/file-service/gen/http/health/server"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/http/middleware"
 )
@@ -21,6 +22,7 @@ func Routes(log *slog.Logger, filesHandler files.Service) http.Handler {
 	filesSrv.Use(httpmiddleware.Logger(log, true))
 	filesSrv.Use(httpmiddleware.RequireContextHeaders())
 	filesSrv.Use(middleware.PopulateRequestContext())
+	filesSrv.Use(otelhttp.NewMiddleware("files"))
 	filesSrv.Mount(mux)
 	for _, m := range filesSrv.Mounts {
 		log.Debug("expose API", "verb", m.Verb, "path", m.Pattern, "method", m.Method)

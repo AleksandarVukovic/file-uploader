@@ -20,10 +20,14 @@ import (
 	"github.com/aleksandarv/file-uploader/common/grpc/interceptor"
 	"github.com/aleksandarv/file-uploader/common/http/client"
 	"github.com/aleksandarv/file-uploader/common/logger"
+	"github.com/aleksandarv/file-uploader/common/telemetry"
 	"github.com/aleksandarv/file-uploader/common/tls"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
+
+const serviceName = "api-service"
 
 func main() {
 	if err := run(); err != nil {
@@ -33,13 +37,15 @@ func main() {
 
 func run() error {
 	var (
-		debug           bool
-		port            int
-		fileServiceURL  string
-		userServiceAddr string
-		tlsCertFile     string
-		tlsKeyFile      string
-		tlsCACertFile   string
+		debug                bool
+		port                 int
+		fileServiceURL       string
+		userServiceAddr      string
+		tlsCertFile          string
+		tlsKeyFile           string
+		tlsCACertFile        string
+		otelCollectorURL     string
+		otelTraceSampleRatio float64
 	)
 	flag.BoolVar(&debug, "debug", false, "Enable debug mode with verbose logging")
 	flag.IntVar(&port, "port", 8080, "HTTP port")
@@ -48,6 +54,8 @@ func run() error {
 	flag.StringVar(&tlsCertFile, "tlsCertFile", "", "Path to this service's TLS client certificate")
 	flag.StringVar(&tlsKeyFile, "tlsKeyFile", "", "Path to this service's TLS client private key")
 	flag.StringVar(&tlsCACertFile, "tlsCACertFile", "", "Path to the CA certificate used to verify file-service's and user-service's server certificates")
+	flag.StringVar(&otelCollectorURL, "otelCollectorURL", "", "URL of the OTEL Collector; telemetry is disabled when empty")
+	flag.Float64Var(&otelTraceSampleRatio, "otelTraceSampleRatio", 1.0, "Fraction of new traces to sample, between 0 and 1")
 	loadFlagsFromEnv()
 	flag.Parse()
 
@@ -74,11 +82,25 @@ func run() error {
 		return err
 	}
 
+	telemetryShutdown, err := telemetry.Init(ctx, serviceName, otelCollectorURL, otelTraceSampleRatio)
+	if err != nil {
+		log.Error("failed to initialize OTEL", "error", err)
+		return err
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := telemetryShutdown(shutdownCtx); err != nil {
+			log.Error("error while shutting down OTEL providers", "error", err)
+		}
+	}()
+
 	fsClient := fileservice.NewClient(fsURL.Scheme, fsURL.Host, debug, client.NewDoer(debug, tlsCfg))
 	filesService := api.NewFilesHandler(fsClient)
 
 	userConn, err := grpc.NewClient(userServiceAddr,
 		grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 		grpc.WithChainUnaryInterceptor(interceptor.ClientRequestID()),
 	)
 	if err != nil {
@@ -145,13 +167,15 @@ func run() error {
 
 func loadFlagsFromEnv() {
 	envToFlag := map[string]string{
-		"DEBUG":             "debug",
-		"PORT":              "port",
-		"FILE_SERVICE_URL":  "fileServiceURL",
-		"USER_SERVICE_ADDR": "userServiceAddr",
-		"TLS_CERT_FILE":     "tlsCertFile",
-		"TLS_KEY_FILE":      "tlsKeyFile",
-		"TLS_CA_CERT_FILE":  "tlsCACertFile",
+		"DEBUG":                   "debug",
+		"PORT":                    "port",
+		"FILE_SERVICE_URL":        "fileServiceURL",
+		"USER_SERVICE_ADDR":       "userServiceAddr",
+		"TLS_CERT_FILE":           "tlsCertFile",
+		"TLS_KEY_FILE":            "tlsKeyFile",
+		"TLS_CA_CERT_FILE":        "tlsCACertFile",
+		"OTEL_COLLECTOR_URL":      "otelCollectorURL",
+		"OTEL_TRACE_SAMPLE_RATIO": "otelTraceSampleRatio",
 	}
 	for env, flagName := range envToFlag {
 		if val := os.Getenv(env); val != "" {

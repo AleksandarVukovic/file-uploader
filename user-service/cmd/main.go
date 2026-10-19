@@ -15,6 +15,7 @@ import (
 
 	"github.com/aleksandarv/file-uploader/common/db"
 	"github.com/aleksandarv/file-uploader/common/logger"
+	"github.com/aleksandarv/file-uploader/common/telemetry"
 	"github.com/aleksandarv/file-uploader/common/tls"
 	"github.com/aleksandarv/file-uploader/user-service/internal/api"
 	sqlc "github.com/aleksandarv/file-uploader/user-service/internal/repository/gen"
@@ -28,6 +29,10 @@ import (
 	"google.golang.org/grpc/credentials"
 )
 
+const (
+	serviceName = "user-service"
+)
+
 func main() {
 	if err := run(); err != nil {
 		os.Exit(1)
@@ -36,16 +41,18 @@ func main() {
 
 func run() error {
 	var (
-		debug             bool
-		healthPort        int
-		grpcPort          int
-		tlsCertFile       string
-		tlsKeyFile        string
-		tlsCACertFile     string
-		brokerURL         string
-		brokerUsersQueue  string
-		brokerTLSCertFile string
-		brokerTLSKeyFile  string
+		debug                bool
+		healthPort           int
+		grpcPort             int
+		tlsCertFile          string
+		tlsKeyFile           string
+		tlsCACertFile        string
+		brokerURL            string
+		brokerUsersQueue     string
+		brokerTLSCertFile    string
+		brokerTLSKeyFile     string
+		otelCollectorURL     string
+		otelTraceSampleRatio float64
 	)
 	flag.BoolVar(&debug, "debug", false, "Enable debug mode with verbose logging")
 	flag.IntVar(&healthPort, "healthPort", 8080, "HTTP port for the health endpoint")
@@ -57,6 +64,8 @@ func run() error {
 	flag.StringVar(&brokerUsersQueue, "brokerUsersQueue", "q.user.imported", "RabbitMQ queue that user import events are consumed from")
 	flag.StringVar(&brokerTLSCertFile, "brokerTLSCertFile", "", "Path to the client certificate presented to RabbitMQ (its CN is the RabbitMQ user)")
 	flag.StringVar(&brokerTLSKeyFile, "brokerTLSKeyFile", "", "Path to the private key of the RabbitMQ client certificate")
+	flag.StringVar(&otelCollectorURL, "otelCollectorURL", "", "URL of the OTEL Collector; telemetry is disabled when empty")
+	flag.Float64Var(&otelTraceSampleRatio, "otelTraceSampleRatio", 1.0, "Fraction of new traces to sample, between 0 and 1")
 	loadFlagsFromEnv()
 	flag.Parse()
 
@@ -69,6 +78,19 @@ func run() error {
 		log.Error("invalid DATABASE_URL", "err", err)
 		return err
 	}
+
+	telemetryShutdown, err := telemetry.Init(ctx, serviceName, otelCollectorURL, otelTraceSampleRatio)
+	if err != nil {
+		log.Error("failed to initialize OTEL", "error", err)
+		return err
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := telemetryShutdown(shutdownCtx); err != nil {
+			log.Error("error while shutting down OTEL providers", "error", err)
+		}
+	}()
 
 	pool, err := pgxpool.New(ctx, dbURL)
 	if err != nil {
@@ -212,16 +234,18 @@ func run() error {
 
 func loadFlagsFromEnv() {
 	envToFlag := map[string]string{
-		"DEBUG":                "debug",
-		"HEALTH_PORT":          "healthPort",
-		"GRPC_PORT":            "grpcPort",
-		"TLS_CERT_FILE":        "tlsCertFile",
-		"TLS_KEY_FILE":         "tlsKeyFile",
-		"TLS_CA_CERT_FILE":     "tlsCACertFile",
-		"BROKER_URL":           "brokerURL",
-		"BROKER_USERS_QUEUE":   "brokerUsersQueue",
-		"BROKER_TLS_CERT_FILE": "brokerTLSCertFile",
-		"BROKER_TLS_KEY_FILE":  "brokerTLSKeyFile",
+		"DEBUG":                   "debug",
+		"HEALTH_PORT":             "healthPort",
+		"GRPC_PORT":               "grpcPort",
+		"TLS_CERT_FILE":           "tlsCertFile",
+		"TLS_KEY_FILE":            "tlsKeyFile",
+		"TLS_CA_CERT_FILE":        "tlsCACertFile",
+		"BROKER_URL":              "brokerURL",
+		"BROKER_USERS_QUEUE":      "brokerUsersQueue",
+		"BROKER_TLS_CERT_FILE":    "brokerTLSCertFile",
+		"BROKER_TLS_KEY_FILE":     "brokerTLSKeyFile",
+		"OTEL_COLLECTOR_URL":      "otelCollectorURL",
+		"OTEL_TRACE_SAMPLE_RATIO": "otelTraceSampleRatio",
 	}
 	for env, flagName := range envToFlag {
 		if val := os.Getenv(env); val != "" {
