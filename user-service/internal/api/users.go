@@ -38,15 +38,25 @@ func (h *usersHandler) Create(ctx context.Context, p *users.CreatePayload) (*use
 
 	u, err := h.svc.Create(ctx, p.Username, p.Email, p.FirstName, p.LastName, p.Password)
 	switch {
-	case errors.Is(err, userssvc.ErrReservedUsername), errors.Is(err, userssvc.ErrWeakPassword):
+	case errors.Is(err, userssvc.ErrReservedUsername):
+		addMetricCreate(ctx, outcomeReservedUsername)
 		return nil, users.MakeBadRequest(err)
-	case errors.Is(err, userssvc.ErrUsernameTaken), errors.Is(err, userssvc.ErrEmailTaken):
+	case errors.Is(err, userssvc.ErrWeakPassword):
+		addMetricCreate(ctx, outcomeWeakPassword)
+		return nil, users.MakeBadRequest(err)
+	case errors.Is(err, userssvc.ErrUsernameTaken):
+		addMetricCreate(ctx, outcomeUsernameTaken)
+		return nil, users.MakeAlreadyExists(err)
+	case errors.Is(err, userssvc.ErrEmailTaken):
+		addMetricCreate(ctx, outcomeEmailTaken)
 		return nil, users.MakeAlreadyExists(err)
 	case err != nil:
+		addMetricCreate(ctx, outcomeError)
 		log.Error("failed to create user", "username", p.Username, "err", err)
 		return nil, users.MakeInternalError(errors.New("failed to create user"))
 	}
 
+	addMetricCreate(ctx, outcomeCreated)
 	log.Info("user created", "username", u.Username, "id", u.ID)
 	return toUser(u), nil
 }

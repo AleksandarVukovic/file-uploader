@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 
+	otelruntime "go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
@@ -77,6 +78,10 @@ func Init(ctx context.Context, serviceName, collectorURL string, sampleRatio flo
 		trace.WithSampler(trace.ParentBased(trace.TraceIDRatioBased(sampleRatio))),
 		trace.WithBatcher(traceExporter),
 	)
+
+	if err := otelruntime.Start(otelruntime.WithMeterProvider(meterProvider)); err != nil {
+		return nil, errors.Join(err, traceProvider.Shutdown(ctx), meterProvider.Shutdown(ctx))
+	}
 
 	otel.SetMeterProvider(meterProvider)
 	otel.SetTracerProvider(traceProvider)
