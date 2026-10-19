@@ -8,6 +8,7 @@ import (
 	"time"
 
 	commonmw "github.com/aleksandarv/file-uploader/common/http/middleware"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	goahttp "goa.design/goa/v3/http"
 	goam "goa.design/goa/v3/middleware"
 )
@@ -25,7 +26,7 @@ func NewDoer(debug bool, tlsConfig *tls.Config) goahttp.Doer {
 		ResponseHeaderTimeout: 3 * time.Second,
 	}
 
-	var doer goahttp.Doer = &http.Client{Transport: transport, Timeout: requestTimeout}
+	var doer goahttp.Doer = &http.Client{Transport: otelhttp.NewTransport(transport), Timeout: requestTimeout}
 	doer = contextHeadersDoer{doer}
 	if debug {
 		doer = goahttp.NewDebugDoer(doer)
