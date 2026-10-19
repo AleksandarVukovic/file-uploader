@@ -29,9 +29,10 @@ import (
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	awsc "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/aws/smithy-go/tracing/smithyoteltracing"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/wagslane/go-rabbitmq"
+	"go.opentelemetry.io/otel"
 )
 
 const (
@@ -107,7 +108,7 @@ func run() error {
 		}
 	}()
 
-	pool, err := pgxpool.New(ctx, dbURL)
+	pool, err := db.NewPool(ctx, dbURL)
 	if err != nil {
 		log.Error("failed to create database pool", "err", err)
 		return err
@@ -124,6 +125,7 @@ func run() error {
 		return err
 	}
 	s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
+		o.TracerProvider = smithyoteltracing.Adapt(otel.GetTracerProvider())
 		if s3Endpoint != "" {
 			o.BaseEndpoint = aws.String(s3Endpoint)
 			o.UsePathStyle = true
