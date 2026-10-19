@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/aleksandarv/file-uploader/common/events"
 	"github.com/aleksandarv/file-uploader/common/messaging"
@@ -53,35 +54,50 @@ func New(log *slog.Logger, store ObjectStore, publisher messaging.Publisher) *Pr
 
 func (p *Processor) Process(d rabbitmq.Delivery) rabbitmq.Action {
 	if d.Type != events.EventTypeFileUploaded {
+		addMetricMessage(context.Background(), outcomeUnknownType)
 		p.log.Error("unknown event type, discarding", "messageId", d.MessageId, "type", d.Type)
 		return rabbitmq.NackDiscard
 	}
 
 	var payload events.FileUploadedPayload
 	if err := json.Unmarshal(d.Body, &payload); err != nil {
+		addMetricMessage(context.Background(), outcomeInvalidPayload)
 		p.log.Error("invalid event payload, discarding", "messageId", d.MessageId, "err", err)
 		return rabbitmq.NackDiscard
 	}
 
 	ctx, span := tracer.Start(context.Background(), "process file uploaded")
 	defer span.End()
-	
+
 	telemetry.SetFileID(ctx, payload.FileID)
 	traceID := telemetry.TraceID(ctx)
 
+	start := time.Now()
 	err := p.processFileUploaded(ctx, payload)
+	metricDuration.Record(ctx, time.Since(start).Seconds())
 	if err != nil {
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 	}
 	switch {
 	case err == nil:
+		addMetricMessage(ctx, outcomeProcessed)
 		p.log.Info("file processed", "messageId", d.MessageId, "fileId", payload.FileID, "trace_id", traceID)
 		return rabbitmq.Ack
-	case errors.Is(err, ErrObjectNotFound), errors.Is(err, ErrBucketNotAllowed), errors.Is(err, ErrInvalidHeader):
+	case errors.Is(err, ErrObjectNotFound):
+		addMetricMessage(ctx, outcomeObjectNotFound)
+		p.log.Error("file cannot be processed, discarding", "messageId", d.MessageId, "fileId", payload.FileID, "trace_id", traceID, "err", err)
+		return rabbitmq.NackDiscard
+	case errors.Is(err, ErrBucketNotAllowed):
+		addMetricMessage(ctx, outcomeBucketNotAllowed)
+		p.log.Error("file cannot be processed, discarding", "messageId", d.MessageId, "fileId", payload.FileID, "trace_id", traceID, "err", err)
+		return rabbitmq.NackDiscard
+	case errors.Is(err, ErrInvalidHeader):
+		addMetricMessage(ctx, outcomeInvalidHeader)
 		p.log.Error("file cannot be processed, discarding", "messageId", d.MessageId, "fileId", payload.FileID, "trace_id", traceID, "err", err)
 		return rabbitmq.NackDiscard
 	default:
+		addMetricMessage(ctx, outcomeRequeued)
 		p.log.Error("failed to process file, requeueing", "messageId", d.MessageId, "fileId", payload.FileID, "trace_id", traceID, "err", err)
 		return rabbitmq.NackRequeue
 	}
@@ -111,7 +127,7 @@ func (p *Processor) processFileUploaded(ctx context.Context, payload events.File
 		return fmt.Errorf("object %q: %w: expected %v, got %v", payload.Path, ErrInvalidHeader, csvHeader, header)
 	}
 
-	valid, skipped, batches := 0, 0, 0
+	valid, malformed, invalidRows, batches := 0, 0, 0, 0
 	batch := make([]events.UserPayload, 0, publishBatchSize)
 	for {
 		row, err := reader.Read()
@@ -122,7 +138,7 @@ func (p *Processor) processFileUploaded(ctx context.Context, payload events.File
 
 		if _, ok := errors.AsType[*csv.ParseError](err); ok {
 			p.log.Error("skipping malformed row", "fileId", payload.FileID, "trace_id", traceID, "line", line, "err", err)
-			skipped++
+			malformed++
 			continue
 		}
 		if err != nil {
@@ -132,7 +148,7 @@ func (p *Processor) processFileUploaded(ctx context.Context, payload events.File
 		user, err := parseUser(row)
 		if err != nil {
 			p.log.Error("skipping invalid row", "fileId", payload.FileID, "trace_id", traceID, "line", line, "err", err)
-			skipped++
+			invalidRows++
 			continue
 		}
 		valid++
@@ -154,7 +170,11 @@ func (p *Processor) processFileUploaded(ctx context.Context, payload events.File
 		batches++
 	}
 
-	p.log.Info("csv processed", "fileId", payload.FileID, "trace_id", traceID, "valid", valid, "skipped", skipped, "batches", batches)
+	addMetricRows(ctx, rowOutcomeValid, int64(valid))
+	addMetricRows(ctx, rowOutcomeMalformed, int64(malformed))
+	addMetricRows(ctx, rowOutcomeInvalid, int64(invalidRows))
+
+	p.log.Info("csv processed", "fileId", payload.FileID, "trace_id", traceID, "valid", valid, "malformed", malformed, "invalid", invalidRows, "batches", batches)
 	return nil
 }
 

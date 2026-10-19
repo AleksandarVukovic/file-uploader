@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"time"
 
 	"github.com/aleksandarv/file-uploader/common/events"
 	"github.com/aleksandarv/file-uploader/common/telemetry"
@@ -31,12 +32,14 @@ func New(log *slog.Logger, users userService) *Importer {
 
 func (i *Importer) Process(d rabbitmq.Delivery) rabbitmq.Action {
 	if d.Type != events.EventTypeUsersImported {
+		addMetricMessage(context.Background(), outcomeUnknownType)
 		i.log.Error("unknown event type, discarding", "messageId", d.MessageId, "type", d.Type)
 		return rabbitmq.NackDiscard
 	}
 
 	var payload events.UsersImportedPayload
 	if err := json.Unmarshal(d.Body, &payload); err != nil {
+		addMetricMessage(context.Background(), outcomeInvalidPayload)
 		i.log.Error("invalid event payload, discarding", "messageId", d.MessageId, "err", err)
 		return rabbitmq.NackDiscard
 	}
@@ -47,7 +50,8 @@ func (i *Importer) Process(d rabbitmq.Delivery) rabbitmq.Action {
 	telemetry.SetFileID(ctx, payload.FileID)
 	traceID := telemetry.TraceID(ctx)
 
-	var imported, skipped int
+	start := time.Now()
+	var imported, duplicate, reserved int
 	for _, u := range payload.Users {
 		_, err := i.users.Import(ctx, u.Username, u.Email, u.FirstName, u.LastName)
 		switch {
@@ -55,18 +59,28 @@ func (i *Importer) Process(d rabbitmq.Delivery) rabbitmq.Action {
 			imported++
 		case errors.Is(err, users.ErrUsernameTaken), errors.Is(err, users.ErrEmailTaken):
 			i.log.Info("user already exists, skipping", "messageId", d.MessageId, "fileId", payload.FileID, "trace_id", traceID, "username", u.Username)
-			skipped++
+			duplicate++
 		case errors.Is(err, users.ErrReservedUsername):
 			i.log.Error("username is reserved, skipping", "messageId", d.MessageId, "fileId", payload.FileID, "trace_id", traceID, "username", u.Username)
-			skipped++
+			reserved++
 		default:
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
 			i.log.Error("failed to import user, requeueing", "messageId", d.MessageId, "fileId", payload.FileID, "trace_id", traceID, "batch", payload.Batch, "username", u.Username, "err", err)
+			recordImportMetrics(ctx, start, imported, duplicate, reserved, outcomeRequeued)
 			return rabbitmq.NackRequeue
 		}
 	}
 
-	i.log.Info("users imported", "messageId", d.MessageId, "fileId", payload.FileID, "trace_id", traceID, "batch", payload.Batch, "imported", imported, "skipped", skipped)
+	recordImportMetrics(ctx, start, imported, duplicate, reserved, outcomeProcessed)
+	i.log.Info("users imported", "messageId", d.MessageId, "fileId", payload.FileID, "trace_id", traceID, "batch", payload.Batch, "imported", imported, "duplicate", duplicate, "reserved", reserved)
 	return rabbitmq.Ack
+}
+
+func recordImportMetrics(ctx context.Context, start time.Time, imported, duplicate, reserved int, outcome string) {
+	metricDuration.Record(ctx, time.Since(start).Seconds())
+	addMetricRecords(ctx, recordOutcomeImported, int64(imported))
+	addMetricRecords(ctx, recordOutcomeDuplicate, int64(duplicate))
+	addMetricRecords(ctx, recordOutcomeReserved, int64(reserved))
+	addMetricMessage(ctx, outcome)
 }

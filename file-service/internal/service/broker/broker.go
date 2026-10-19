@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/aleksandarv/file-uploader/common/events"
 	"github.com/aleksandarv/file-uploader/common/logger"
@@ -41,6 +42,7 @@ func (s *service) PublishFileEvents(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("get unpublished file events: %w", err)
 	}
+	metricBatchSize.Record(ctx, int64(len(pending)))
 
 	var errs []error
 	published := 0
@@ -76,21 +78,28 @@ func (s *service) publishEvent(ctx context.Context, event outbox.Event) (err err
 
 	routingKey, ok := routingKeys[event.EventType]
 	if !ok {
+		addMetricEvent(ctx, outcomeUnknownType)
 		return fmt.Errorf("file event %s (fileId %s): unknown event type %q", event.ID, event.AggregateID, event.EventType)
 	}
 
+	start := time.Now()
 	err = s.publisher.Publish(ctx, messaging.Message{
 		ID:         event.ID,
 		Type:       event.EventType,
 		RoutingKey: routingKey,
 		Body:       event.Payload,
 	})
+	metricPublishDuration.Record(ctx, time.Since(start).Seconds())
 	if err != nil {
+		addMetricEvent(ctx, outcomePublishFailed)
 		return fmt.Errorf("file event %s (fileId %s): publish: %w", event.ID, event.AggregateID, err)
 	}
 
 	if err := s.outboxRepo.MarkPublished(ctx, event.ID); err != nil {
+		addMetricEvent(ctx, outcomeMarkFailed)
 		return fmt.Errorf("file event %s (fileId %s): published but not marked, it will be published again: %w", event.ID, event.AggregateID, err)
 	}
+
+	addMetricEvent(ctx, outcomePublished)
 	return nil
 }

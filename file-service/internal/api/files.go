@@ -9,6 +9,8 @@ import (
 	"github.com/aleksandarv/file-uploader/common/logger"
 	"github.com/aleksandarv/file-uploader/file-service/gen/files"
 	"github.com/aleksandarv/file-uploader/file-service/internal/service/storage"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 type filesHandler struct {
@@ -25,6 +27,7 @@ func (h *filesHandler) Upload(ctx context.Context, p *files.UploadPayload, body 
 
 	userID, ok := httpmiddleware.UserIDFromCtx(ctx)
 	if !ok {
+		addMetricUpload(ctx, outcomeMissingUserID)
 		log.Error("upload rejected: missing user ID")
 		return nil, files.MakeBadRequest(errors.New("User ID is required"))
 	}
@@ -38,25 +41,33 @@ func (h *filesHandler) Upload(ctx context.Context, p *files.UploadPayload, body 
 		Body:        body,
 	})
 	if errors.Is(err, storage.ErrInvalidChecksum) {
+		addMetricUpload(ctx, outcomeInvalidChecksum)
 		log.Error("upload rejected: malformed checksum", "filename", p.Filename, "checksum", p.Checksum)
 		return nil, files.MakeBadRequest(errors.New("Checksum must be a hex-encoded SHA-256 digest"))
 	}
 	if errors.Is(err, storage.ErrChecksumMismatch) {
+		addMetricUpload(ctx, outcomeChecksumMismatch)
 		log.Error("upload rejected: checksum mismatch", "err", err, "filename", p.Filename, "checksum", p.Checksum)
 		return nil, files.MakeBadRequest(errors.New("Checksum does not match the uploaded content"))
 	}
 	if errors.Is(err, storage.ErrIncompleteBody) {
+		addMetricUpload(ctx, outcomeIncompleteBody)
 		log.Error("upload rejected: incomplete body", "err", err, "filename", p.Filename, "size", p.Size)
 		return nil, files.MakeBadRequest(errors.New("Uploaded content is shorter than the declared size"))
 	}
 	if errors.Is(err, storage.ErrDuplicateFile) {
+		addMetricUpload(ctx, outcomeDuplicate)
 		log.Error("upload rejected: duplicate file", "err", err, "filename", p.Filename)
 		return nil, files.MakeConflict(errors.New("File has been already uploaded"))
 	}
 	if err != nil {
+		addMetricUpload(ctx, outcomeError)
 		log.Error("failed to store file", "err", err, "filename", p.Filename)
 		return nil, files.MakeInternalError(errors.New("Error while storing file"))
 	}
+
+	addMetricUpload(ctx, outcomeStored)
+	metricFileSize.Record(ctx, res.Size)
 
 	log.Info("file stored", "fileId", res.UUID, "filename", res.Filename, "contentType", res.ContentType, "checksum", p.Checksum, "size", res.Size)
 	return &files.UploadResult{
@@ -65,4 +76,8 @@ func (h *filesHandler) Upload(ctx context.Context, p *files.UploadPayload, body 
 		ContentType: res.ContentType,
 		Size:        res.Size,
 	}, nil
+}
+
+func addMetricUpload(ctx context.Context, outcome string) {
+	metricUploads.Add(ctx, 1, metric.WithAttributes(attribute.String("outcome", outcome)))
 }
