@@ -41,6 +41,9 @@ services:
       BROKER_FILES_EXCHANGE: ex.files
       BROKER_TLS_CERT_FILE: /certs/rabbitmq-file-service.pem
       BROKER_TLS_KEY_FILE: /certs/rabbitmq-file-service-key.pem
+      OTEL_COLLECTOR_URL: http://otel-collector:4317
+      # note: this is value only for local env!
+      OTEL_TRACE_SAMPLE_RATIO: "1.0"
     volumes:
       # reuse credentials from local env
       - ~/.aws:/home/appuser/.aws:ro
@@ -73,6 +76,8 @@ services:
       - ./certs:/certs:ro
     depends_on:
       rabbitmq:
+        condition: service_healthy
+      file-service:
         condition: service_healthy
 
   file-db:
@@ -137,6 +142,9 @@ services:
       TLS_CERT_FILE: /certs/api-service.pem
       TLS_KEY_FILE: /certs/api-service-key.pem
       TLS_CA_CERT_FILE: /certs/ca.pem
+      OTEL_COLLECTOR_URL: http://otel-collector:4317
+      # note: this is value only for local env!
+      OTEL_TRACE_SAMPLE_RATIO: "1.0"
     volumes:
       - ./certs:/certs:ro
     depends_on:
@@ -212,6 +220,9 @@ services:
       BROKER_USERS_QUEUE: q.user.imported
       BROKER_TLS_CERT_FILE: /certs/rabbitmq-user-service.pem
       BROKER_TLS_KEY_FILE: /certs/rabbitmq-user-service-key.pem
+      OTEL_COLLECTOR_URL: http://otel-collector:4317
+      # note: this is value only for local env!
+      OTEL_TRACE_SAMPLE_RATIO: "1.0"
     volumes:
       - ./certs:/certs:ro
     depends_on:
@@ -219,6 +230,42 @@ services:
         condition: service_completed_successfully
       rabbitmq:
         condition: service_healthy
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.163.1
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./infra/telemetry/otel-collector-config.yaml:/etc/otel-collector-config.yaml
+    ports:
+      - "4317:4317"
+      - "8889:8889"
+    depends_on:
+      - jaeger
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.76.0
+    ports:
+      - "16686:16686"
+
+  prometheus:
+    image: prom/prometheus:v3.15.0
+    volumes:
+      - ./infra/telemetry/prometheus.yml:/etc/prometheus/prometheus.yml
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana:13.2.4
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    volumes:
+      - ./infra/telemetry/grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+    depends_on:
+      - prometheus
+      - jaeger
 
 volumes:
   user-db-data:
