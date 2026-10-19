@@ -33,6 +33,11 @@ func FromCtx(ctx context.Context) *slog.Logger {
 	panic("logger: context without logger")
 }
 
+func WithAttrs(ctx context.Context, args ...any) (context.Context, *slog.Logger) {
+	log := FromCtx(ctx).With(args...)
+	return WithCtx(ctx, log), log
+}
+
 func WithRequestID(log *slog.Logger, reqID string) *slog.Logger {
 	return log.With(slog.String("reqID", reqID))
 }

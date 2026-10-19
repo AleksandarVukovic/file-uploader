@@ -15,12 +15,16 @@ import (
 	"strings"
 
 	"github.com/aleksandarv/file-uploader/common/events"
-	"github.com/aleksandarv/file-uploader/common/logger"
 	"github.com/aleksandarv/file-uploader/common/messaging"
+	"github.com/aleksandarv/file-uploader/common/telemetry"
 	"github.com/wagslane/go-rabbitmq"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 )
 
 const publishBatchSize = 50
+
+var tracer = otel.Tracer("file-processing-service/processor")
 
 var (
 	ErrObjectNotFound   = errors.New("object not found")
@@ -48,37 +52,40 @@ func New(log *slog.Logger, store ObjectStore, publisher messaging.Publisher) *Pr
 }
 
 func (p *Processor) Process(d rabbitmq.Delivery) rabbitmq.Action {
-	ctx := logger.WithCtx(context.Background(), p.log.With("messageId", d.MessageId))
-	log := logger.FromCtx(ctx)
-
 	if d.Type != events.EventTypeFileUploaded {
-		log.Error("unknown event type, discarding", "type", d.Type)
+		p.log.Error("unknown event type, discarding", "messageId", d.MessageId, "type", d.Type)
 		return rabbitmq.NackDiscard
 	}
 
 	var payload events.FileUploadedPayload
 	if err := json.Unmarshal(d.Body, &payload); err != nil {
-		log.Error("invalid event payload, discarding", "err", err)
+		p.log.Error("invalid event payload, discarding", "messageId", d.MessageId, "err", err)
 		return rabbitmq.NackDiscard
 	}
 
+	ctx, span := tracer.Start(context.Background(), "process file uploaded")
+	defer span.End()
+	telemetry.SetFileID(ctx, payload.FileID)
+
 	err := p.processFileUploaded(ctx, payload)
+	if err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
+	}
 	switch {
 	case err == nil:
-		log.Info("file processed", "fileId", payload.FileID)
+		p.log.Info("file processed", "messageId", d.MessageId, "fileId", payload.FileID)
 		return rabbitmq.Ack
 	case errors.Is(err, ErrObjectNotFound), errors.Is(err, ErrBucketNotAllowed), errors.Is(err, ErrInvalidHeader):
-		log.Error("file cannot be processed, discarding", "fileId", payload.FileID, "err", err)
+		p.log.Error("file cannot be processed, discarding", "messageId", d.MessageId, "fileId", payload.FileID, "err", err)
 		return rabbitmq.NackDiscard
 	default:
-		log.Error("failed to process file, requeueing", "fileId", payload.FileID, "err", err)
+		p.log.Error("failed to process file, requeueing", "messageId", d.MessageId, "fileId", payload.FileID, "err", err)
 		return rabbitmq.NackRequeue
 	}
 }
 
 func (p *Processor) processFileUploaded(ctx context.Context, payload events.FileUploadedPayload) error {
-	log := logger.FromCtx(ctx)
-
 	body, err := p.store.Get(ctx, payload.RootDir, payload.Path)
 	if err != nil {
 		return err
@@ -110,7 +117,7 @@ func (p *Processor) processFileUploaded(ctx context.Context, payload events.File
 		line, _ := reader.FieldPos(0)
 
 		if _, ok := errors.AsType[*csv.ParseError](err); ok {
-			log.Error("skipping malformed row", "fileId", payload.FileID, "line", line, "err", err)
+			p.log.Error("skipping malformed row", "fileId", payload.FileID, "line", line, "err", err)
 			skipped++
 			continue
 		}
@@ -120,7 +127,7 @@ func (p *Processor) processFileUploaded(ctx context.Context, payload events.File
 
 		user, err := parseUser(row)
 		if err != nil {
-			log.Error("skipping invalid row", "fileId", payload.FileID, "line", line, "err", err)
+			p.log.Error("skipping invalid row", "fileId", payload.FileID, "line", line, "err", err)
 			skipped++
 			continue
 		}
@@ -143,7 +150,7 @@ func (p *Processor) processFileUploaded(ctx context.Context, payload events.File
 		batches++
 	}
 
-	log.Info("csv processed", "fileId", payload.FileID, "valid", valid, "skipped", skipped, "batches", batches)
+	p.log.Info("csv processed", "fileId", payload.FileID, "valid", valid, "skipped", skipped, "batches", batches)
 	return nil
 }
 

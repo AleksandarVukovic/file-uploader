@@ -7,10 +7,14 @@ import (
 	"log/slog"
 
 	"github.com/aleksandarv/file-uploader/common/events"
-	"github.com/aleksandarv/file-uploader/common/logger"
+	"github.com/aleksandarv/file-uploader/common/telemetry"
 	"github.com/aleksandarv/file-uploader/user-service/internal/service/users"
 	"github.com/wagslane/go-rabbitmq"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/codes"
 )
+
+var tracer = otel.Tracer("user-service/importer")
 
 type userService interface {
 	Import(ctx context.Context, username, email, firstName, lastName string) (users.User, error)
@@ -26,19 +30,20 @@ func New(log *slog.Logger, users userService) *Importer {
 }
 
 func (i *Importer) Process(d rabbitmq.Delivery) rabbitmq.Action {
-	ctx := logger.WithCtx(context.Background(), i.log.With("messageId", d.MessageId))
-	log := logger.FromCtx(ctx)
-
 	if d.Type != events.EventTypeUsersImported {
-		log.Error("unknown event type, discarding", "type", d.Type)
+		i.log.Error("unknown event type, discarding", "messageId", d.MessageId, "type", d.Type)
 		return rabbitmq.NackDiscard
 	}
 
 	var payload events.UsersImportedPayload
 	if err := json.Unmarshal(d.Body, &payload); err != nil {
-		log.Error("invalid event payload, discarding", "err", err)
+		i.log.Error("invalid event payload, discarding", "messageId", d.MessageId, "err", err)
 		return rabbitmq.NackDiscard
 	}
+
+	ctx, span := tracer.Start(context.Background(), "import users")
+	defer span.End()
+	telemetry.SetFileID(ctx, payload.FileID)
 
 	var imported, skipped int
 	for _, u := range payload.Users {
@@ -47,17 +52,19 @@ func (i *Importer) Process(d rabbitmq.Delivery) rabbitmq.Action {
 		case err == nil:
 			imported++
 		case errors.Is(err, users.ErrUsernameTaken), errors.Is(err, users.ErrEmailTaken):
-			log.Info("user already exists, skipping", "fileId", payload.FileID, "username", u.Username)
+			i.log.Info("user already exists, skipping", "messageId", d.MessageId, "fileId", payload.FileID, "username", u.Username)
 			skipped++
 		case errors.Is(err, users.ErrReservedUsername):
-			log.Error("username is reserved, skipping", "fileId", payload.FileID, "username", u.Username)
+			i.log.Error("username is reserved, skipping", "messageId", d.MessageId, "fileId", payload.FileID, "username", u.Username)
 			skipped++
 		default:
-			log.Error("failed to import user, requeueing", "fileId", payload.FileID, "batch", payload.Batch, "username", u.Username, "err", err)
+			span.RecordError(err)
+			span.SetStatus(codes.Error, err.Error())
+			i.log.Error("failed to import user, requeueing", "messageId", d.MessageId, "fileId", payload.FileID, "batch", payload.Batch, "username", u.Username, "err", err)
 			return rabbitmq.NackRequeue
 		}
 	}
 
-	log.Info("users imported", "fileId", payload.FileID, "batch", payload.Batch, "imported", imported, "skipped", skipped)
+	i.log.Info("users imported", "messageId", d.MessageId, "fileId", payload.FileID, "batch", payload.Batch, "imported", imported, "skipped", skipped)
 	return rabbitmq.Ack
 }

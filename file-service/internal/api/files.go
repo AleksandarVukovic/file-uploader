@@ -58,7 +58,7 @@ func (h *filesHandler) Upload(ctx context.Context, p *files.UploadPayload, body 
 		return nil, files.MakeInternalError(errors.New("Error while storing file"))
 	}
 
-	log.Info("file stored", "uuid", res.UUID, "filename", res.Filename, "contentType", res.ContentType, "checksum", p.Checksum, "size", res.Size)
+	log.Info("file stored", "fileId", res.UUID, "filename", res.Filename, "contentType", res.ContentType, "checksum", p.Checksum, "size", res.Size)
 	return &files.UploadResult{
 		UUID:        res.UUID,
 		Filename:    res.Filename,

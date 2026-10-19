@@ -11,6 +11,7 @@ import (
 
 	"github.com/aleksandarv/file-uploader/common/events"
 	"github.com/aleksandarv/file-uploader/common/logger"
+	"github.com/aleksandarv/file-uploader/common/telemetry"
 	"github.com/aleksandarv/file-uploader/file-service/internal/outbox"
 	"github.com/google/uuid"
 )
@@ -120,6 +121,8 @@ func (s *service) Store(ctx context.Context, in StoreInput) (StoreResult, error)
 	id := uuid.NewString()
 	key := strconv.FormatInt(in.UserID, 10) + "/" + id
 
+	telemetry.SetFileID(ctx, id)
+
 	file, err := s.repo.Insert(ctx, File{
 		ID:             id,
 		UserID:         in.UserID,
@@ -134,7 +137,7 @@ func (s *service) Store(ctx context.Context, in StoreInput) (StoreResult, error)
 	if err != nil {
 		return StoreResult{}, err
 	}
-	log.Info("file record successfully instered in db", "uuid", id, "status", file.Status)
+	log.Info("file record successfully instered in db", "fileId", id, "status", file.Status)
 
 	err = s.objectStore.Put(ctx, PutInput{
 		Key:            key,
@@ -144,21 +147,23 @@ func (s *service) Store(ctx context.Context, in StoreInput) (StoreResult, error)
 		ChecksumSHA256: checksum,
 	})
 	if err != nil {
+		log.Error("failed to save file to object store", "fileId", id, "err", err)
 		// detach cleanup task from request
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
 		defer cancel()
 		if delErr := s.repo.Delete(cleanupCtx, id); delErr != nil {
-			log.Error("failed to delete file record after failed upload", "uuid", id, "err", delErr)
+			log.Error("failed to delete file record after failed upload", "fileId", id, "err", delErr)
 		}
 		return StoreResult{}, err
 	}
-	log.Info("file successfully saved to object store", "uuid", id)
+	log.Info("file successfully saved to object store", "fileId", id)
 
 	file, err = s.markUploaded(ctx, id, file)
 	if err != nil {
+		log.Error("failed to mark file as uploaded", "fileId", id, "err", err)
 		return StoreResult{}, err
 	}
-	log.Info("file status updated to uploaded and outbox event recorded", "uuid", id, "status", file.Status)
+	log.Info("file status updated to uploaded and outbox event recorded", "fileId", id, "status", file.Status)
 
 	return StoreResult{
 		UUID:        id,
@@ -230,14 +235,14 @@ func (s *service) CleanupPendingFiles(ctx context.Context) error {
 		for _, f := range files {
 			exists, err := s.objectStore.Exists(ctx, f.Path)
 			if err != nil {
-				log.Error("failed to check if file exists in object store", "uuid", f.ID, "path", f.Path, "err", err)
+				log.Error("failed to check if file exists in object store", "fileId", f.ID, "path", f.Path, "err", err)
 				failed++
 				continue
 			}
 			if exists {
 				_, err = s.markUploaded(ctx, f.ID, f)
 				if err != nil {
-					log.Error("failed to mark pending file which exists in object store as uploaded", "uuid", f.ID, "err", err)
+					log.Error("failed to mark pending file which exists in object store as uploaded", "fileId", f.ID, "err", err)
 					failed++
 					continue
 				}
@@ -245,7 +250,7 @@ func (s *service) CleanupPendingFiles(ctx context.Context) error {
 			} else {
 				err = s.repo.Delete(ctx, f.ID)
 				if err != nil {
-					log.Error("failed to delete pending file record", "uuid", f.ID, "err", err)
+					log.Error("failed to delete pending file record", "fileId", f.ID, "err", err)
 					failed++
 					continue
 				}

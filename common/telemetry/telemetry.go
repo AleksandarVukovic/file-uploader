@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
@@ -15,7 +16,10 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
+
+const FileIDKey = attribute.Key("file.id")
 
 func Init(ctx context.Context, serviceName, collectorURL string, sampleRatio float64) (func(context.Context) error, error) {
 	if sampleRatio < 0 || sampleRatio > 1 {
@@ -84,4 +88,8 @@ func Init(ctx context.Context, serviceName, collectorURL string, sampleRatio flo
 	return func(ctx context.Context) error {
 		return errors.Join(traceProvider.Shutdown(ctx), meterProvider.Shutdown(ctx))
 	}, nil
+}
+
+func SetFileID(ctx context.Context, fileID string) {
+	oteltrace.SpanFromContext(ctx).SetAttributes(FileIDKey.String(fileID))
 }

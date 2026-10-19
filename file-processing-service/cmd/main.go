@@ -17,6 +17,7 @@ import (
 
 	"github.com/aleksandarv/file-uploader/common/logger"
 	"github.com/aleksandarv/file-uploader/common/messaging"
+	"github.com/aleksandarv/file-uploader/common/telemetry"
 	"github.com/aleksandarv/file-uploader/common/tls"
 	"github.com/aleksandarv/file-uploader/file-processing-service/internal/api"
 	"github.com/aleksandarv/file-uploader/file-processing-service/internal/objectstore"
@@ -25,11 +26,16 @@ import (
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	awsc "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/smithy-go/tracing/smithyoteltracing"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/wagslane/go-rabbitmq"
+	"go.opentelemetry.io/otel"
 )
 
-const brokerConfirmTimeout = 2 * time.Second
+const (
+	serviceName          = "file-processing-service"
+	brokerConfirmTimeout = 2 * time.Second
+)
 
 func main() {
 	if err := run(); err != nil {
@@ -39,16 +45,18 @@ func main() {
 
 func run() error {
 	var (
-		debug               bool
-		healthPort          int
-		s3BucketNames       string
-		s3Endpoint          string
-		tlsCACertFile       string
-		brokerURL           string
-		brokerFilesQueue    string
-		brokerUsersExchange string
-		brokerTLSCertFile   string
-		brokerTLSKeyFile    string
+		debug                bool
+		healthPort           int
+		s3BucketNames        string
+		s3Endpoint           string
+		tlsCACertFile        string
+		brokerURL            string
+		brokerFilesQueue     string
+		brokerUsersExchange  string
+		brokerTLSCertFile    string
+		brokerTLSKeyFile     string
+		otelCollectorURL     string
+		otelTraceSampleRatio float64
 	)
 	flag.BoolVar(&debug, "debug", false, "Enable debug mode with verbose logging")
 	flag.IntVar(&healthPort, "healthPort", 8080, "HTTP port for the health endpoint")
@@ -60,6 +68,8 @@ func run() error {
 	flag.StringVar(&brokerUsersExchange, "brokerUsersExchange", "ex.users", "RabbitMQ exchange that user events are published to")
 	flag.StringVar(&brokerTLSCertFile, "brokerTLSCertFile", "", "Path to the client certificate presented to RabbitMQ (its CN is the RabbitMQ user)")
 	flag.StringVar(&brokerTLSKeyFile, "brokerTLSKeyFile", "", "Path to the private key of the RabbitMQ client certificate")
+	flag.StringVar(&otelCollectorURL, "otelCollectorURL", "", "URL of the OTEL Collector; telemetry is disabled when empty")
+	flag.Float64Var(&otelTraceSampleRatio, "otelTraceSampleRatio", 1.0, "Fraction of new traces to sample, between 0 and 1")
 	loadFlagsFromEnv()
 	flag.Parse()
 
@@ -74,12 +84,26 @@ func run() error {
 		return err
 	}
 
+	telemetryShutdown, err := telemetry.Init(ctx, serviceName, otelCollectorURL, otelTraceSampleRatio)
+	if err != nil {
+		log.Error("failed to initialize OTEL", "error", err)
+		return err
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := telemetryShutdown(shutdownCtx); err != nil {
+			log.Error("error while shutting down OTEL providers", "error", err)
+		}
+	}()
+
 	cfg, err := awsc.LoadDefaultConfig(ctx)
 	if err != nil {
 		log.Error("failed to load AWS config", "err", err)
 		return err
 	}
 	s3Client := s3.NewFromConfig(cfg, func(o *s3.Options) {
+		o.TracerProvider = smithyoteltracing.Adapt(otel.GetTracerProvider())
 		if s3Endpoint != "" {
 			o.BaseEndpoint = aws.String(s3Endpoint)
 			o.UsePathStyle = true
@@ -218,16 +242,18 @@ func isPlainHTTP(endpoint string) bool {
 
 func loadFlagsFromEnv() {
 	envToFlag := map[string]string{
-		"DEBUG":                 "debug",
-		"HEALTH_PORT":           "healthPort",
-		"S3_BUCKET_NAMES":       "bucketNames",
-		"S3_ENDPOINT":           "s3Endpoint",
-		"TLS_CA_CERT_FILE":      "tlsCACertFile",
-		"BROKER_URL":            "brokerURL",
-		"BROKER_FILES_QUEUE":    "brokerFilesQueue",
-		"BROKER_USERS_EXCHANGE": "brokerUsersExchange",
-		"BROKER_TLS_CERT_FILE":  "brokerTLSCertFile",
-		"BROKER_TLS_KEY_FILE":   "brokerTLSKeyFile",
+		"DEBUG":                   "debug",
+		"HEALTH_PORT":             "healthPort",
+		"S3_BUCKET_NAMES":         "bucketNames",
+		"S3_ENDPOINT":             "s3Endpoint",
+		"TLS_CA_CERT_FILE":        "tlsCACertFile",
+		"BROKER_URL":              "brokerURL",
+		"BROKER_FILES_QUEUE":      "brokerFilesQueue",
+		"BROKER_USERS_EXCHANGE":   "brokerUsersExchange",
+		"BROKER_TLS_CERT_FILE":    "brokerTLSCertFile",
+		"BROKER_TLS_KEY_FILE":     "brokerTLSKeyFile",
+		"OTEL_COLLECTOR_URL":      "otelCollectorURL",
+		"OTEL_TRACE_SAMPLE_RATIO": "otelTraceSampleRatio",
 	}
 	for env, flagName := range envToFlag {
 		if val := os.Getenv(env); val != "" {
